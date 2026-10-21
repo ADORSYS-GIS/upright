@@ -1,0 +1,8 @@
+#!/bin/bash -e
+
+# Prepare the database when starting the web server (with or without extra flags).
+if echo " $* " | grep -q " rails server\| ./bin/rails server "; then
+  ./bin/rails db:prepare
+fi
+
+exec "${@}"

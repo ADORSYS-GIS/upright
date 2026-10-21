@@ -1,0 +1,17 @@
+# HTTP Probe Definitions
+# Add your HTTP health check probes here
+#
+# Required fields:
+#   - name: Unique identifier for the probe
+#   - url: The URL to check
+#
+# Optional fields:
+#   - expected_status: HTTP status code to expect (default: 200-399)
+#   - alert_severity: Alert severity when probe fails: medium, high (default), critical
+#   - basic_auth_credentials: Key in Rails credentials for basic auth
+#   - proxy: Key in Rails credentials for proxy settings
+
+# Add a real target before enabling. An active probe is checked every 30 seconds
+# and a failure is sent to #alerts.
+# - name: Example Health Check
+#   url: https://example.com

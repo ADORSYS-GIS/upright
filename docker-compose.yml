@@ -1,0 +1,64 @@
+services:
+  app:
+    image: ruby:3.4-bookworm
+    container_name: upright-app
+    working_dir: /app
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      SITE_SUBDOMAIN: lon
+      PORT: "3000"
+      PROMETHEUS_URL: http://prometheus:9090
+      ALERTMANAGER_URL: http://alertmanager:9093
+    ports:
+      - "3000:3000"
+      - "9394:9394"
+    volumes:
+      - .:/app
+      - upright-bundle:/usr/local/bundle
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    init: true
+    command:
+      - bash
+      - -c
+      - export PATH="/usr/local/bundle/bin:$$PATH" && bundle install && exec bin/rails server -b 0.0.0.0 -p 3000
+    depends_on:
+      - prometheus
+      - alertmanager
+
+  prometheus:
+    image: prom/prometheus:v3.4.1
+    container_name: upright-prometheus
+    # 9091 on the host: 9090 is already used by another local Prometheus.
+    ports:
+      - "127.0.0.1:9091:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./config/prometheus/development/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./config/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-remote-write-receiver"
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: upright-alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./config/alertmanager/development/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+
+volumes:
+  prometheus_data:
+  alertmanager_data:
+  upright-bundle:

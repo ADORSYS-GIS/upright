@@ -1,0 +1,12 @@
+# Traceroute Probe Definitions
+# Add your traceroute probes here
+#
+# Required fields:
+#   - name: Unique identifier for the probe
+#   - host: Hostname or IP address to trace
+#
+# Optional fields:
+#   - alert_severity: Alert severity when probe fails: medium, high (default), critical
+
+# - name: Example Service
+#   host: example.com

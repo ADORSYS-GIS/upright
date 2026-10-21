@@ -1,0 +1,30 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        # The app container reaches the collector over the private Docker
+        # network, so the receiver must listen on a non-loopback interface.
+        # Kamal does not publish this port to the host (no `port:` on the
+        # accessory), so it is only reachable from containers on that network.
+        # If you ever publish it, bind a specific internal interface instead
+        # of 0.0.0.0 and require authentication.
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 2s
+
+exporters:
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]

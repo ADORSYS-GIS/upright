@@ -1,0 +1,29 @@
+image:
+  repository: ghcr.io/adorsys-gis/upright/upright
+  tag: latest
+  pullPolicy: Always
+  pullSecret: ghcr-pull-secret
+
+# Admin UI is always https://app.<hostname>. Confirm both names with the
+# team: app.eudi-adorsys.com and lon.eudi-adorsys.com. A nested host such
+# as monitor.eudi-adorsys.com will not match the cluster wildcard cert.
+hostname: eudi-adorsys.com
+siteSubdomain: lon
+
+ingress:
+  className: nginx
+  # Leave empty so cert-manager does not rewrite the shared wildcard secret.
+  clusterIssuer: ""
+  tlsSecretName: eudi-adorsys-tls
+
+aws:
+  region: eu-central-1
+  secretsManagerKey: datev-wallet-secrets
+  secretStore:
+    name: datev-secret-store
+    kind: ClusterSecretStore
+
+persistence:
+  app: 10Gi
+  prometheus: 20Gi
+  alertmanager: 2Gi

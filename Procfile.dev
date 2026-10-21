@@ -1,0 +1,2 @@
+web: bin/rails server -b '0.0.0.0' -p ${PORT:-3000}
+jobs: OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES bin/rails solid_queue:start

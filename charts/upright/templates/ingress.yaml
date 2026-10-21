@@ -1,0 +1,40 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "upright.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "upright.labels" . | nindent 4 }}
+  annotations:
+    {{- with .Values.ingress.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ . | quote }}
+    {{- end }}
+    external-dns.alpha.kubernetes.io/hostname: {{ include "upright.appHost" . }},{{ include "upright.siteHost" . }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  tls:
+    - secretName: {{ .Values.ingress.tlsSecretName }}
+      hosts:
+        - {{ include "upright.appHost" . | quote }}
+        - {{ include "upright.siteHost" . | quote }}
+  rules:
+    - host: {{ include "upright.appHost" . | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "upright.fullname" . }}
+                port:
+                  number: 3000
+    - host: {{ include "upright.siteHost" . | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "upright.fullname" . }}
+                port:
+                  number: 3000

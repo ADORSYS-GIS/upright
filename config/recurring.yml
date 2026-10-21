@@ -1,0 +1,45 @@
+development:
+  http_probes:
+    schedule: every minute
+    command: "Upright::Probes::HTTPProbe.check_and_record_all_later"
+
+  smtp_probes:
+    schedule: every minute
+    command: "Upright::Probes::SMTPProbe.check_and_record_all_later"
+
+production:
+  http_probes:
+    schedule: "*/30 * * * * *"
+    command: "Upright::Probes::HTTPProbe.check_and_record_all_later"
+
+  smtp_probes:
+    schedule: "*/30 * * * * *"
+    command: "Upright::Probes::SMTPProbe.check_and_record_all_later"
+
+  clear_solid_queue_finished_jobs:
+    command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"
+    schedule: every hour at minute 12
+
+  cleanup_stale_probe_results:
+    command: "Upright::ProbeResult.cleanup_stale"
+    schedule: every hour at minute 30
+
+  sweep_playwright_videos:
+    class: "Upright::PlaywrightVideoSweepJob"
+    schedule: every hour at minute 45
+
+  health_metrics:
+    class: "Upright::HealthMetricsJob"
+    schedule: every minute
+
+  aggregate_rollups:
+    class: "Upright::Rollups::DailyAggregationJob"
+    schedule: every hour at minute 5
+
+  advance_maintenances:
+    class: "Upright::MaintenanceAdvanceJob"
+    schedule: "*/15 * * * * *"
+
+  report_incidents:
+    class: "Upright::IncidentReporterJob"
+    schedule: "*/30 * * * * *"
