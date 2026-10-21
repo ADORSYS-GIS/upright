@@ -38,7 +38,12 @@ COPY . .
 
 RUN bundle exec bootsnap precompile app.rb probes/
 
-RUN SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile && \
+# These values exist only for this build step. The running container still
+# requires the real UPRIGHT_HOSTNAME and PROMETHEUS_OTLP_TOKEN.
+RUN SECRET_KEY_BASE_DUMMY=1 \
+    UPRIGHT_HOSTNAME=build.local \
+    PROMETHEUS_OTLP_TOKEN=build \
+    ./bin/rails assets:precompile && \
     rm -rf tmp/cache tmp/pids tmp/sockets log/*
 
 FROM base
