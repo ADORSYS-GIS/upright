@@ -53,14 +53,16 @@ Running `bin/rails db:prepare` from a local checkout uses the development databa
 
 ### Secrets
 
-Add these properties to the existing AWS secret `datev-wallet-secrets` in `eu-central-1`. The chart copies them into the namespace through `datev-secret-store`. All four must be present or the app will not start.
+Add these properties to the existing AWS secret `datev-wallet-secrets` in `eu-central-1`. The chart copies each AWS property into a container environment variable through `datev-secret-store`. The running containers read those environment names. All four must be present or the app will not start.
 
-| Property | Value |
-| --- | --- |
-| `UPRIGHT_RAILS_MASTER_KEY` | The single line in `config/master.key`. This decrypts `config/credentials.yml.enc`. |
-| `UPRIGHT_ADMIN_PASSWORD` | Password for the `admin` user. |
-| `UPRIGHT_PROMETHEUS_OTLP_TOKEN` | One shared machine token, generated once with `openssl rand -hex 64`. Every pod uses this same value. People sign in with the admin password. |
-| `UPRIGHT_DISCORD_WEBHOOK_URL` | Webhook URL for the Discord alerts channel. |
+| AWS property | Container environment | Value |
+| --- | --- | --- |
+| `UPRIGHT_RAILS_MASTER_KEY` | `RAILS_MASTER_KEY` | The single line in `config/master.key`. This decrypts `config/credentials.yml.enc`. |
+| `UPRIGHT_ADMIN_PASSWORD` | `ADMIN_PASSWORD` | Password for the `admin` user. |
+| `UPRIGHT_PROMETHEUS_OTLP_TOKEN` | `PROMETHEUS_OTLP_TOKEN` | One shared machine token, generated once with `openssl rand -hex 64`. Every pod uses this same value. People sign in with the admin password. |
+| `UPRIGHT_DISCORD_WEBHOOK_URL` | `DISCORD_WEBHOOK_URL` | Webhook URL for the Discord alerts channel. |
+
+Local development reads `ADMIN_PASSWORD` from `.env`, which defaults to `admin`. Deployment maps `UPRIGHT_ADMIN_PASSWORD` to `ADMIN_PASSWORD`. There is no production default. If `ADMIN_PASSWORD` is unset, sign-in has no credential, so the local password is never used in production.
 
 The namespace also needs a pull secret named `ghcr-pull-secret` so the cluster can pull the image from GHCR.
 
