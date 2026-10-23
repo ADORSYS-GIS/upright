@@ -43,6 +43,14 @@ One Pod runs the web process and the probe jobs from the same image. Both mount 
 
 TLS uses the existing wildcard secret `eudi-adorsys-tls`. Settings live in `charts/upright/values.yaml`.
 
+### Releases
+
+The chart migrates on each deploy. Its `db-prepare` init container runs `./bin/rails db:prepare` before the web container starts. That container uses the production image, so `RAILS_ENV` is `production`, and it mounts the persistent volume at `/rails/storage`. The web process does not migrate when it starts.
+
+`db:prepare` migrates the primary database, the Upright persistent database, and the production queue, cache, and cable databases.
+
+Running `bin/rails db:prepare` from a local checkout uses the development databases under `storage/`. It does not use the production databases or the cluster volume. A separate release step has to run that command in the production image with `RAILS_ENV=production`, the volume mounted at `/rails/storage`, and the same environment and secrets as the `db-prepare` init container.
+
 ### Secrets
 
 Add these properties to the existing AWS secret `datev-wallet-secrets` in `eu-central-1`. The chart copies them into the namespace through `datev-secret-store`. All four must be present or the app will not start.
