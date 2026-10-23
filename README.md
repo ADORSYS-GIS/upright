@@ -41,6 +41,16 @@ One Pod runs the web process and the probe jobs from the same image. Both mount 
 
 TLS uses the existing wildcard secret `eudi-adorsys-tls`. Settings live in `charts/upright/values.yaml`.
 
+### Releases
+
+Run database changes once per release:
+
+```bash
+bin/rails db:prepare
+```
+
+That command migrates the primary database, the Upright persistent database, and the production queue, cache, and cable databases. The web process does not migrate when it starts.
+
 ### Secrets
 
 Add these properties to the existing AWS secret `datev-wallet-secrets` in `eu-central-1`. The chart copies them into the namespace through `datev-secret-store`. All four must be present or the app will not start.
