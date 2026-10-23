@@ -21,10 +21,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     init: true
+    # Create and migrate primary, persistent, and queue before the server listens.
     command:
       - bash
       - -c
-      - export PATH="/usr/local/bundle/bin:$$PATH" && bundle install && exec bin/rails server -b 0.0.0.0 -p 3000
+      - export PATH="/usr/local/bundle/bin:$$PATH" && bundle install && bin/rails db:prepare && exec bin/rails server -b 0.0.0.0 -p 3000
     depends_on:
       - prometheus
       - alertmanager

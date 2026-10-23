@@ -14,6 +14,8 @@ docker compose up -d
 docker compose logs -f app
 ```
 
+That command installs gems, then prepares the primary, persistent, and queue databases before Rails listens.
+
 When the log shows `Listening on http://0.0.0.0:3000`:
 
 | Surface | URL | Access |
