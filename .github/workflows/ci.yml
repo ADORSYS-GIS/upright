@@ -112,8 +112,6 @@ jobs:
           context: .
           file: ./Dockerfile
           push: false
-          secrets: |
-            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
