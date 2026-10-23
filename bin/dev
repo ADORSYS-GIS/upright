@@ -1,2 +1,19 @@
 #!/usr/bin/env ruby
-exec "./bin/rails", "server", *ARGV
+
+pids = []
+
+stop = lambda do
+  pids.each do |pid|
+    Process.kill("TERM", pid)
+  rescue Errno::ESRCH
+    nil
+  end
+end
+
+trap("INT") { stop.call }
+trap("TERM") { stop.call }
+
+pids << Process.spawn("./bin/jobs")
+pids << Process.spawn("./bin/rails", "server", *ARGV)
+
+Process.waitall

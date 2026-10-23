@@ -14,7 +14,7 @@ docker compose up -d
 docker compose logs -f app
 ```
 
-That command installs gems, then prepares the primary, persistent, and queue databases before Rails listens.
+That command installs gems, prepares the primary, persistent, and queue databases, and starts the Solid Queue worker beside the web process.
 
 When the log shows `Listening on http://0.0.0.0:3000`:
 
