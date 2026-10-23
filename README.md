@@ -43,13 +43,11 @@ TLS uses the existing wildcard secret `eudi-adorsys-tls`. Settings live in `char
 
 ### Releases
 
-Run database changes once per release:
+The chart migrates on each deploy. Its `db-prepare` init container runs `./bin/rails db:prepare` before the web container starts. That container uses the production image, so `RAILS_ENV` is `production`, and it mounts the persistent volume at `/rails/storage`. The web process does not migrate when it starts.
 
-```bash
-bin/rails db:prepare
-```
+`db:prepare` migrates the primary database, the Upright persistent database, and the production queue, cache, and cable databases.
 
-That command migrates the primary database, the Upright persistent database, and the production queue, cache, and cable databases. The web process does not migrate when it starts.
+Running `bin/rails db:prepare` from a local checkout uses the development databases under `storage/`. It does not use the production databases or the cluster volume. A separate release step has to run that command in the production image with `RAILS_ENV=production`, the volume mounted at `/rails/storage`, and the same environment and secrets as the `db-prepare` init container.
 
 ### Secrets
 
