@@ -21,13 +21,44 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     init: true
+    # Create and migrate primary, persistent, and queue before the server listens.
     command:
       - bash
       - -c
-      - export PATH="/usr/local/bundle/bin:$$PATH" && bundle install && exec bin/rails server -b 0.0.0.0 -p 3000
+      - export PATH="/usr/local/bundle/bin:$$PATH" && bundle install && bin/rails db:prepare && exec bin/rails server -b 0.0.0.0 -p 3000
+    healthcheck:
+      test: ["CMD", "ruby", "-e", "require 'socket'; TCPSocket.new('127.0.0.1', 3000).close"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 60s
     depends_on:
       - prometheus
       - alertmanager
+
+  jobs:
+    image: ruby:3.4-bookworm
+    container_name: upright-jobs
+    working_dir: /app
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      SITE_SUBDOMAIN: lon
+      PROMETHEUS_URL: http://prometheus:9090
+      ALERTMANAGER_URL: http://alertmanager:9093
+    volumes:
+      - .:/app
+      - upright-bundle:/usr/local/bundle
+    init: true
+    command:
+      - bash
+      - -c
+      - export PATH="/usr/local/bundle/bin:$$PATH" && bundle install && exec bin/jobs
+    depends_on:
+      app:
+        condition: service_healthy
 
   prometheus:
     image: prom/prometheus:v3.4.1
