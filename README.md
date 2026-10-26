@@ -27,6 +27,12 @@ When the log shows `Listening on http://0.0.0.0:3000`:
 
 Stop the stack with `docker compose down`.
 
+Run the test suite in the app container. `bin/rails test` uses the test databases under `storage/`.
+
+```bash
+docker compose exec app bin/rails test
+```
+
 ## Production
 
 Pushing `main` to [ADORSYS-GIS/upright](https://github.com/ADORSYS-GIS/upright) builds and publishes `ghcr.io/adorsys-gis/upright/upright`. The chart in `charts/upright` installs that image into the `datev-wallet` namespace.
