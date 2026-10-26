@@ -5,6 +5,9 @@ Upright.configure do |config|
   config.user_agent   = "upright/1.0"
   config.hostname     = Rails.env.local? ? "upright.localhost" : ENV.fetch("UPRIGHT_HOSTNAME")
 
+  # The engine layout loads these after its own stylesheets.
+  config.public_stylesheets = %w[sign_in]
+
   # Playwright CLI path (defaults to "npx playwright", override with PLAYWRIGHT_CLI_PATH env var)
   # config.playwright_cli_path = "npx playwright"
 
