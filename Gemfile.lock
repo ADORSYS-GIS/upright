@@ -159,9 +159,7 @@ GEM
       logger
     i18n (1.15.2)
       concurrent-ruby (~> 1.0)
-    image_processing (1.14.0)
-      mini_magick (>= 4.9.5, < 6)
-      ruby-vips (>= 2.0.17, < 3)
+    image_processing (2.2.0)
     importmap-rails (2.2.3)
       actionpack (>= 6.0.0)
       activesupport (>= 6.0.0)
@@ -212,8 +210,6 @@ GEM
       logger
       mime-types-data (~> 3.2025, >= 3.2025.0507)
     mime-types-data (3.2026.1006)
-    mini_magick (5.4.0)
-      logger
     mini_mime (1.1.5)
     minitest (6.0.6)
       drb (~> 2.0)
@@ -591,9 +587,6 @@ GEM
       rubocop-rails (>= 2.30)
     ruby-next-core (1.2.1)
     ruby-progressbar (1.13.0)
-    ruby-vips (2.3.0)
-      ffi (~> 1.12)
-      logger
     securerandom (0.4.1)
     solid_cable (4.1.0)
       actioncable (>= 7.2)
@@ -721,7 +714,7 @@ DEPENDENCIES
   brakeman
   bundler-audit
   debug
-  image_processing (~> 1.2)
+  image_processing (~> 2.2)
   importmap-rails
   jbuilder
   kamal
