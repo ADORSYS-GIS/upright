@@ -33,5 +33,5 @@ Rails.application.configure do
   # A per-request nonce. request.session.id is blank on the first response,
   # which is the sign-in page, so the importmap script would not match.
   config.content_security_policy_nonce_generator = ->(_request) { SecureRandom.base64(16) }
-  config.content_security_policy_nonce_directives = %w(script-src)
+  config.content_security_policy_nonce_directives = %w[script-src]
 end
