@@ -3,8 +3,9 @@
 # Production image for the Upright host app.
 # HTTP probes only by default. Browser probes need:
 #   docker build --build-arg INSTALL_PLAYWRIGHT=1 -t upright .
-ARG RUBY_VERSION=3.4.11
-FROM docker.io/library/ruby:$RUBY_VERSION-slim AS base
+# Dependabot opens a pull request for this tag. Review the Ruby patch notes
+# and set .ruby-version to the same patch.
+FROM docker.io/library/ruby:3.4.11-slim AS base
 
 WORKDIR /rails
 
