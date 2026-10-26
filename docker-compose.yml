@@ -82,12 +82,21 @@ services:
     container_name: upright-alertmanager
     ports:
       - "127.0.0.1:9093:9093"
+    env_file:
+      - path: .env
+        required: false
     volumes:
       - ./config/alertmanager/development/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager_data:/alertmanager
+    entrypoint: ["/bin/sh", "-c"]
     command:
-      - "--config.file=/etc/alertmanager/alertmanager.yml"
-      - "--storage.path=/alertmanager"
+      - |
+        if [ -z "$$DISCORD_WEBHOOK_URL" ]; then
+          echo "DISCORD_WEBHOOK_URL is unset. Add it to .env so local alerts can be delivered." >&2
+          exit 1
+        fi
+        printf '%s' "$$DISCORD_WEBHOOK_URL" > /tmp/discord_webhook
+        exec /bin/alertmanager --config.file=/etc/alertmanager/alertmanager.yml --storage.path=/alertmanager
 
 volumes:
   prometheus_data:
