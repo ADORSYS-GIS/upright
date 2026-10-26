@@ -65,3 +65,53 @@ jobs:
       - name: Lint code for consistent style
         run: bin/rubocop -f github
 
+  boot:
+    runs-on: ubuntu-latest
+    env:
+      RAILS_ENV: development
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Migrate the primary, persistent, and queue databases
+        run: bin/rails db:prepare
+
+      - name: Boot the app
+        run: |
+          bin/rails runner - <<'RUBY'
+          checks = {
+            "primary" => "active_storage_blobs",
+            "persistent" => "upright_incidents",
+            "queue" => "solid_queue_jobs"
+          }
+          checks.each do |name, table|
+            ActiveRecord::Base.establish_connection(name.to_sym)
+            abort("#{name} is missing #{table}") unless ActiveRecord::Base.connection.data_source_exists?(table)
+          end
+          puts "booted #{Rails.env}"
+          RUBY
+
+  build_image:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build the production image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
