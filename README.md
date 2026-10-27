@@ -18,14 +18,14 @@ Set `DISCORD_WEBHOOK_URL` in the copied `.env` before `docker compose up`. That 
 
 That command installs gems, prepares the primary, persistent, and queue databases, and starts the Solid Queue worker beside the web process.
 
-When the log shows `Listening on http://0.0.0.0:3000`:
+When the log shows `Listening on http://0.0.0.0:3000`, open a host under `upright.localhost`. The engine allows that name and its subdomains. `http://localhost:3000` is rejected.
 
-| Surface | URL | Access |
+Signed out, both app URLs redirect to the sign-in page at http://app.upright.localhost:3000/session/new. That redirect is the expected result. Sign in as `admin` with `ADMIN_PASSWORD` (default `admin`). The same session works on both hosts.
+
+| URL | Signed out | Signed in |
 | --- | --- | --- |
-| Admin UI | http://app.upright.localhost:3000 | `admin` / `ADMIN_PASSWORD` (default `admin`) |
-| London site | http://lon.upright.localhost:3000 | same session |
-| Prometheus | http://127.0.0.1:9091 | local only |
-| Alertmanager | http://127.0.0.1:9093 | local only |
+| http://app.upright.localhost:3000 | Sign-in page | Sites, the admin UI |
+| http://lon.upright.localhost:3000 | Sign-in page | Probe results for London |
 
 Stop the stack with `docker compose down`.
 
