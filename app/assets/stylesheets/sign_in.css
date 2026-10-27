@@ -1,0 +1,15 @@
+/* Unlayered so this beats the gem's @layer components row layout. */
+.sign-in-box {
+  width: min(400px, 100%);
+}
+
+.sign-in-box form {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--block-space);
+  text-align: left;
+}
+
+.sign-in-box form :is(input, .btn) {
+  width: 100%;
+}
