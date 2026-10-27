@@ -19,7 +19,9 @@ class ContentSecurityPolicyTest < ActionDispatch::IntegrationTest
           "sign-in form action #{form["action"]} is outside form-action"
       end
     end
+    assert allows_form_action?(sources, "http://app.upright.localhost:80/capture", document_origin)
     assert_not allows_form_action?(sources, "https://example.com/capture", document_origin)
+    assert_not allows_form_action?(sources, "http://app.upright.localhost:3001/capture", document_origin)
   end
 
   test "inline style elements stay nonced while style attributes stay allowed" do
@@ -47,18 +49,41 @@ class ContentSecurityPolicyTest < ActionDispatch::IntegrationTest
     def allows_form_action?(sources, target, document_origin)
       destination = URI.parse(target)
       document = URI.parse(document_origin)
-      same_origin = destination.host.nil? || (destination.host == document.host && destination.scheme.in?([ nil, document.scheme ]))
 
       sources.any? do |source|
         case source
-        when "'self'" then same_origin
+        when "'self'" then same_origin?(destination, document)
         when "'none'" then false
         when "*" then true
-        else
-          scheme = destination.scheme || document.scheme
-          host = destination.host || document.host
-          source == "#{scheme}:" || source == "#{scheme}://#{host}" || source == target
+        else source_matches?(source, destination, document, target)
         end
       end
+    end
+
+    def same_origin?(destination, document)
+      destination.host.nil? || normalized_origin(destination, document) == normalized_origin(document, document)
+    end
+
+    # scheme + host + effective port. The default port for the scheme is omitted,
+    # so http://host and http://host:80 are one origin and http://host:3001 is not.
+    def normalized_origin(uri, document)
+      scheme = uri.scheme || document.scheme
+      host = uri.host || document.host
+      port = uri.port || default_port(scheme)
+
+      if port == default_port(scheme)
+        "#{scheme}://#{host}"
+      else
+        "#{scheme}://#{host}:#{port}"
+      end
+    end
+
+    def default_port(scheme)
+      scheme == "https" ? 443 : 80
+    end
+
+    def source_matches?(source, destination, document, target)
+      scheme = destination.scheme || document.scheme
+      source == "#{scheme}:" || source == normalized_origin(destination, document) || source == target
     end
 end
