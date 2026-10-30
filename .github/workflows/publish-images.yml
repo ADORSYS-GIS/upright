@@ -36,17 +36,25 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}/upright
           tags: |
-            type=ref,event=branch
+            type=sha,format=long
             type=semver,pattern={{version}}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and push image
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
           push: true
+          build-args: |
+            INSTALL_PLAYWRIGHT=1
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Record the image digest
+        run: |
+          echo "Deploy this digest:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`ghcr.io/${GITHUB_REPOSITORY}/upright@${{ steps.build.outputs.digest }}\`" >> "$GITHUB_STEP_SUMMARY"
