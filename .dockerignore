@@ -52,3 +52,10 @@
 # Ignore Docker-related files
 /.dockerignore
 /Dockerfile*
+
+# Repository-only files. The image build and the running container do not
+# read them. Database migrations under db/ stay in the image.
+/test/
+/README*
+/docker-compose.yml
+/Procfile.dev

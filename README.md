@@ -44,9 +44,18 @@ Run the test suite in the app container. `bin/rails test` uses the test database
 docker compose exec app bin/rails test
 ```
 
+Compose does not install Chromium. This builds the same browser-enabled image that CI publishes, then checks that Playwright can launch Chromium as uid 1000:
+
+```bash
+docker build --build-arg INSTALL_PLAYWRIGHT=1 -t upright:browser .
+docker run --rm --user 1000:1000 --shm-size=1g upright:browser ./bin/check-chromium
+```
+
+The command prints `chromium-ok` when the browser starts. A missing browser or a launch failure exits non-zero.
+
 ## Production
 
-Pushing `main` to [ADORSYS-GIS/upright](https://github.com/ADORSYS-GIS/upright) builds and publishes `ghcr.io/adorsys-gis/upright/upright`. The chart in `charts/upright` installs that image into the `datev-wallet` namespace.
+Pushing `main` to [ADORSYS-GIS/upright](https://github.com/ADORSYS-GIS/upright) builds `ghcr.io/adorsys-gis/upright/upright` with Chromium and publishes the commit SHA. The workflow summary records the image digest, `ghcr.io/adorsys-gis/upright/upright@sha256:...`. Deploy that digest. The workflow does not publish a `latest` tag. The chart in `charts/upright` installs the image named in `values.yaml` into the `datev-wallet` namespace.
 
 ```bash
 helm upgrade --install upright ./charts/upright \

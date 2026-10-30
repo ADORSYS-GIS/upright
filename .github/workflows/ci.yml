@@ -129,6 +129,12 @@ jobs:
           context: .
           file: ./Dockerfile
           push: false
+          load: true
+          tags: upright:ci
+          build-args: |
+            INSTALL_PLAYWRIGHT=1
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Playwright launches Chromium as uid 1000
+        run: docker run --rm --user 1000:1000 --shm-size=1g upright:ci ./bin/check-chromium
