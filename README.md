@@ -48,19 +48,24 @@ Compose does not install Chromium. This builds the same browser-enabled image th
 
 ```bash
 docker build --build-arg INSTALL_PLAYWRIGHT=1 -t upright:browser .
-docker run --rm --user 1000:1000 --shm-size=1g upright:browser ./bin/check-chromium
+docker run --rm --user 1000:1000 --shm-size=1g --security-opt seccomp=docker/seccomp_profile.json upright:browser ./bin/check-chromium
 ```
 
-The command prints `chromium-ok` when the browser starts. A missing browser or a launch failure exits non-zero.
+`docker/seccomp_profile.json` is the Playwright 1.59.1 seccomp profile. It is Docker's default profile plus permission for `clone`, `setns`, and `unshare`, which the Chromium sandbox needs in order to create a user namespace. The command prints `chromium-ok` when the browser starts. A missing browser or a launch failure exits non-zero.
 
 ## Production
 
-Pushing `main` to [ADORSYS-GIS/upright](https://github.com/ADORSYS-GIS/upright) builds `ghcr.io/adorsys-gis/upright/upright` with Chromium and publishes the commit SHA. The workflow summary records the image digest, `ghcr.io/adorsys-gis/upright/upright@sha256:...`. Deploy that digest. The workflow does not publish a `latest` tag. The chart in `charts/upright` installs the image named in `values.yaml` into the `datev-wallet` namespace.
+Pushing `main` to [ADORSYS-GIS/upright](https://github.com/ADORSYS-GIS/upright) builds `ghcr.io/adorsys-gis/upright/upright` with Chromium and publishes the commit SHA. The workflow summary records the image digest, `ghcr.io/adorsys-gis/upright/upright@sha256:...`. The workflow does not publish a `latest` tag.
+
+Pass that digest to Helm. With `image.digest` set, the web container, the jobs container, and the `db-prepare` init container use `repository@digest`. An empty `image.digest` leaves the chart on `image.tag` from `charts/upright/values.yaml`, which is `latest`.
 
 ```bash
 helm upgrade --install upright ./charts/upright \
-  --namespace datev-wallet
+  --namespace datev-wallet \
+  --set image.digest=sha256:<hex>
 ```
+
+`<hex>` is the hex after `@sha256:` in the workflow summary. The three containers then use `ghcr.io/adorsys-gis/upright/upright@sha256:<hex>`.
 
 One Pod runs the web process and the probe jobs from the same image. Both mount a persistent volume at `/rails/storage`, so SQLite data survives a restart. Prometheus and Alertmanager run beside the app. Ingress publishes:
 

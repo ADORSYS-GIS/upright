@@ -1,6 +1,9 @@
 image:
   repository: ghcr.io/adorsys-gis/upright/upright
+  # Deploy with --set image.digest=sha256:... from the publish workflow summary.
+  # tag is used when digest is empty. The workflow does not publish latest.
   tag: latest
+  digest: ""
   pullPolicy: Always
   pullSecret: ghcr-pull-secret
 

@@ -137,4 +137,4 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Playwright launches Chromium as uid 1000
-        run: docker run --rm --user 1000:1000 --shm-size=1g upright:ci ./bin/check-chromium
+        run: docker run --rm --user 1000:1000 --shm-size=1g --security-opt seccomp=docker/seccomp_profile.json upright:ci ./bin/check-chromium

@@ -59,3 +59,4 @@
 /README*
 /docker-compose.yml
 /Procfile.dev
+/docker/
