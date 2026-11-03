@@ -4,10 +4,10 @@
 
 shared:
   sites:
-    - code: lon
-      city: London
-      country: GB
-      geohash: gcpvj0
+    - code: fra
+      city: Frankfurt
+      country: DE
+      geohash: u0yjjd
       stores_metrics: true
       primary: true
 

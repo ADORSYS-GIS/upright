@@ -1,0 +1,74 @@
+{{- if .Values.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "upright.name" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "upright.labels" . | nindent 4 }}
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: upright_recording
+      interval: 30s
+      rules:
+        - record: upright:probe_down_fraction
+          expr: |
+            (
+              count by (name, type, probe_target, alert_severity, probe_service) (upright_probe_up == 0)
+              or
+              count by (name, type, probe_target, alert_severity, probe_service) (upright_probe_up) * 0
+            )
+            /
+            count by (name, type, probe_target, alert_severity, probe_service) (upright_probe_up)
+        - record: upright:probe_uptime_daily
+          expr: |
+            avg_over_time((
+              sum by (name, type, probe_target, alert_severity, probe_service) (upright_probe_up)
+              /
+              count by (name, type, probe_target, alert_severity, probe_service) (upright_probe_up)
+              > bool 0.5
+            )[1d:])
+    - name: upright_alerts
+      rules:
+        - alert: UprightMassFailure
+          annotations:
+            summary: "Mass failure - {{ `{{ $value | humanizePercentage }}` }} of probes down"
+            description: "Many probes failing simultaneously, likely an Upright or network issue"
+            upright: "https://{{ include "upright.appHost" . }}/?status=fail"
+          expr: |
+            count(upright:probe_down_fraction > 0.5)
+            /
+            count(count by (name, type, probe_target) (upright_probe_up))
+            > 0.2
+          labels:
+            severity: critical
+            group: upright
+        - alert: UprightPoolDegraded
+          annotations:
+            summary: "Upright pool degraded - {{ `{{ $value }}` }} site(s) missing"
+            description: "Upright pool degraded - {{ `{{ $value }}` }} site(s) missing"
+            upright: "https://{{ include "upright.appHost" . }}/"
+          expr: |
+            max_over_time(count(count by (site_code) (upright_probe_up))[1h:1m])
+            -
+            count(count by (site_code) (upright_probe_up))
+            > 0
+          for: 5m
+          labels:
+            severity: critical
+            group: upright
+        - alert: UprightHTTPSiteMissing
+          annotations:
+            summary: "HTTP probes missing from {{ `{{ $labels.site_city }}` }}"
+            description: "{{ `{{ $labels.site_city }}` }} ({{ `{{ $labels.site_code }}` }}) stopped reporting HTTP probe metrics."
+            upright: "https://{{ `{{ $labels.site_code }}` }}.{{ .Values.hostname }}/?probe_type=http"
+          expr: |
+            count by (site_code, site_city) (max_over_time(upright_probe_up{type="http"}[1h]))
+            unless
+            count by (site_code, site_city) (upright_probe_up{type="http"})
+          for: 5m
+          labels:
+            severity: warning
+            group: upright
+{{- end }}

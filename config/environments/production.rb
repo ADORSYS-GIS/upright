@@ -77,6 +77,6 @@ Rails.application.configure do
   config.active_record.attributes_for_inspect = [ :id ]
 
   # Ingress only routes these two names. Probes call /up with the Pod IP as Host.
-  config.hosts = %w[app.eudi-adorsys.com lon.eudi-adorsys.com]
+  config.hosts = %w[app.upright.eudi-adorsys.com fra.upright.eudi-adorsys.com]
   config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
 end
