@@ -1,0 +1,37 @@
+#!/bin/bash -e
+
+# Launch Chromium through Playwright as the application user.
+# The Chromium sandbox stays on. Start the container with
+# --security-opt seccomp=docker/seccomp_profile.json so the sandbox can
+# create a user namespace.
+
+if [ "$(id -u)" != "1000" ]; then
+  echo "Chromium must run as uid 1000, got $(id -u)" >&2
+  exit 1
+fi
+
+if [ ! -s /usr/local/playwright-node-path ]; then
+  echo "Playwright is not installed in this image. Rebuild with --build-arg INSTALL_PLAYWRIGHT=1." >&2
+  exit 1
+fi
+
+export NODE_PATH
+NODE_PATH="$(cat /usr/local/playwright-node-path)"
+
+node <<'EOF'
+const { chromium } = require("playwright");
+
+(async () => {
+  const browser = await chromium.launch({
+    chromiumSandbox: true,
+    args: ["--disable-dev-shm-usage"]
+  });
+  const page = await browser.newPage();
+  await page.goto("about:blank");
+  await browser.close();
+  console.log("chromium-ok");
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+EOF

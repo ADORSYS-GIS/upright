@@ -62,9 +62,11 @@ RUN if [ "$INSTALL_PLAYWRIGHT" = "1" ]; then \
       PLAYWRIGHT_VERSION=$(cat /tmp/playwright_version) && \
       npm install -g "playwright@~${PLAYWRIGHT_VERSION}.0" && \
       playwright install --with-deps chromium && \
+      npm root -g > /usr/local/playwright-node-path && \
       npm cache clean --force && \
       rm -rf /var/lib/apt/lists /var/cache/apt/archives /root/.npm && \
-      chmod -R o+rx /ms-playwright; \
+      chmod -R o+rx /ms-playwright && \
+      chmod a+r /usr/local/playwright-node-path; \
     fi
 
 COPY --from=build --chown=1000:1000 "${BUNDLE_PATH}" "${BUNDLE_PATH}"
