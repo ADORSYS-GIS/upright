@@ -5,7 +5,7 @@
 #   docker build --build-arg INSTALL_PLAYWRIGHT=1 -t upright .
 # Dependabot opens a pull request for this tag. Review the Ruby patch notes
 # and set .ruby-version to the same patch.
-FROM docker.io/library/ruby:3.4.11-slim AS base
+FROM docker.io/library/ruby:4.0.0-slim AS base
 
 WORKDIR /rails
 
