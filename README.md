@@ -20,14 +20,14 @@ That command installs gems, prepares the primary, persistent, and queue database
 
 When the log shows `Listening on http://0.0.0.0:3000`, open a host under `upright.localhost`. The engine allows that name and its subdomains. `http://localhost:3000` is rejected.
 
-Upright uses `app.<base-hostname>` for the admin UI and `<site-code>.<base-hostname>` for that site's probe results. The local base hostname is `upright.localhost`. `lon` is the site code configured in `config/sites.yml` for London, the location where probes run. It is the current site code, not a fixed Upright hostname. Another site uses its own code as the subdomain.
+Upright uses `app.<base-hostname>` for the admin UI and `<site-code>.<base-hostname>` for that site's probe results. The local base hostname is `upright.localhost`. `fra` is the site code configured in `config/sites.yml` for Frankfurt, the location where probes run. It is the current site code, not a fixed Upright hostname. Another site uses its own code as the subdomain.
 
 Signed out, both app URLs redirect to the sign-in page at http://app.upright.localhost:3000/session/new. That redirect is the expected result. Sign in as `admin` with `ADMIN_PASSWORD` (default `admin`). The same session works on both hosts.
 
 | URL | Role | Signed out | Signed in |
 | --- | --- | --- | --- |
 | http://app.upright.localhost:3000 | Admin UI (`app.<base-hostname>`) | Sign-in page | Sites, the admin UI |
-| http://lon.upright.localhost:3000 | Probe results for site code `lon` | Sign-in page | Probe results for London |
+| http://fra.upright.localhost:3000 | Probe results for site code `fra` | Sign-in page | Probe results for Frankfurt |
 
 Docker Compose also publishes the monitoring UIs on localhost:
 
@@ -57,16 +57,22 @@ docker run --rm --user 1000:1000 --shm-size=1g --security-opt seccomp=docker/sec
 
 Pushing `main` to [ADORSYS-GIS/upright](https://github.com/ADORSYS-GIS/upright) builds `ghcr.io/adorsys-gis/upright/upright` with Chromium and publishes the commit SHA. The workflow summary records the image digest, `ghcr.io/adorsys-gis/upright/upright@sha256:...`. The workflow does not publish a `latest` tag.
 
-Pass that digest to Helm. The chart uses `bjw-s/app-template` v5.3.0. With the digest set on `defaultContainerOptions.image`, the web container, the jobs container, and the `db-prepare` init container use `repository@digest`. An empty digest leaves those containers on `tag: latest`.
+The chart pins that digest on `defaultContainerOptions.image`, so the web container, the jobs container, and the `db-prepare` init container use `repository:tag@digest`. The pin in `charts/upright/values.yaml` is the image published from the browser-capable build (`sha-3774812f19b3e49467a7821a1e261e67c9189622`). Bump the digest (and the matching SHA tag) after a new `main` publish.
 
 ```bash
 helm dependency update ./charts/upright
 helm upgrade --install upright ./charts/upright \
-  --namespace datev-wallet \
-  --set app-template.controllers.main.defaultContainerOptions.image.digest=sha256:<hex>
+  --namespace datev-wallet
 ```
 
-`<hex>` is the hex after `@sha256:` in the workflow summary. The three containers then use `ghcr.io/adorsys-gis/upright/upright@sha256:<hex>`.
+To override the pin without editing values:
+
+```bash
+helm upgrade --install upright ./charts/upright \
+  --namespace datev-wallet \
+  --set app-template.controllers.main.defaultContainerOptions.image.tag=sha-<commit> \
+  --set app-template.controllers.main.defaultContainerOptions.image.digest=sha256:<hex>
+```
 
 One Pod runs the web process and the probe jobs from the same image. Both mount a persistent volume at `/rails/storage` on the `high-performance` StorageClass, so SQLite data survives a restart. The chart does not ship Prometheus or Alertmanager. A ServiceMonitor on port `9394` and a PrometheusRule, both labeled `release: kube-prometheus-stack`, are selected by the cluster Prometheus. Alerts go to the shared `platform-webhook` receiver. Ingress publishes:
 
