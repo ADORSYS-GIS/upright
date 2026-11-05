@@ -12,15 +12,15 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
 {{- define "upright.appHost" -}}
-app.{{ .Values.hostname }}
+app.{{ .Values.global.hostname }}
 {{- end }}
 
 {{- define "upright.siteHost" -}}
-{{ .Values.siteSubdomain }}.{{ .Values.hostname }}
+{{ .Values.global.siteSubdomain }}.{{ .Values.global.hostname }}
 {{- end }}
 
 {{- define "upright.envSecret" -}}
-{{ .Values.secretStore.targetSecretName }}
+{{ .Values.global.secretStore.targetSecretName }}
 {{- end }}
 
 {{- define "upright.secretStoreName" -}}

@@ -1,0 +1,54 @@
+app-template:
+  configMaps:
+    http-probes:
+      data:
+        http_probes.yml: |
+          # HTTP Probe Definitions
+          # Add your HTTP health check probes here
+          #
+          # Required fields:
+          #   - name: Unique identifier for the probe
+          #   - url: The URL to check
+          #
+          # Optional fields:
+          #   - expected_status: HTTP status code to expect (default: 200-399)
+          #   - alert_severity: Alert severity when probe fails: medium, high (default), critical
+          #   - basic_auth_credentials: Key in Rails credentials for basic auth
+          #   - proxy: Key in Rails credentials for proxy settings
+
+          # Add a real target before enabling. An active probe is checked every 30 seconds
+          # and a failure is sent to the shared Alertmanager receiver.
+          # - name: Example Health Check
+          #   url: https://example.com
+
+    smtp-probes:
+      data:
+        smtp_probes.yml: |
+          # SMTP Probe Definitions
+          # Add your SMTP health check probes here
+          #
+          # Required fields:
+          #   - name: Unique identifier for the probe
+          #   - host: SMTP server hostname
+          #
+          # Optional fields:
+          #   - alert_severity: Alert severity when probe fails: medium, high (default), critical
+
+          # - name: Example Mail Server
+          #   host: mail.example.com
+
+    traceroute-probes:
+      data:
+        traceroute_probes.yml: |
+          # Traceroute Probe Definitions
+          # Add your traceroute probes here
+          #
+          # Required fields:
+          #   - name: Unique identifier for the probe
+          #   - host: Hostname or IP address to trace
+          #
+          # Optional fields:
+          #   - alert_severity: Alert severity when probe fails: medium, high (default), critical
+
+          # - name: Example Service
+          #   host: example.com

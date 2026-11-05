@@ -1,7 +1,10 @@
-# Base hostname for the admin and site hosts:
-#   app.<hostname> and <siteSubdomain>.<hostname>
-hostname: upright.eudi-adorsys.com
-siteSubdomain: fra
+# Shared with the app-template subchart via Helm's global merge.
+# Admin host is app.<hostname>; site host is <siteSubdomain>.<hostname>.
+global:
+  hostname: upright.eudi-adorsys.com
+  siteSubdomain: fra
+  secretStore:
+    targetSecretName: upright-secret
 
 aws:
   region: eu-central-1
@@ -10,7 +13,6 @@ aws:
 secretStore:
   enabled: true
   name: upright-secret-store
-  targetSecretName: upright-secret
 
 externalSecret:
   enabled: true
@@ -18,10 +20,6 @@ externalSecret:
 
 prometheusRule:
   enabled: true
-
-# Shared monitoring services in the monitoring namespace.
-prometheusUrl: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
-alertmanagerUrl: http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093
 
 app-template:
   global:
@@ -50,13 +48,13 @@ app-template:
           digest: sha256:95425981d98e67e1056fd810522cf3429afb21c9aa5cd97756bee8b252b68530
           pullPolicy: IfNotPresent
         env:
-          UPRIGHT_HOSTNAME: upright.eudi-adorsys.com
-          SITE_SUBDOMAIN: fra
+          UPRIGHT_HOSTNAME: "{{ .Values.global.hostname }}"
+          SITE_SUBDOMAIN: "{{ .Values.global.siteSubdomain }}"
           PROMETHEUS_URL: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
           ALERTMANAGER_URL: http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093
         envFrom:
           - secretRef:
-              name: upright-secret
+              name: "{{ .Values.global.secretStore.targetSecretName }}"
       initContainers:
         db-prepare:
           command:
@@ -99,7 +97,6 @@ app-template:
             limits:
               memory: 2Gi
         jobs:
-          dependsOn: web
           command:
             - ./bin/jobs
           resources:
@@ -134,16 +131,16 @@ app-template:
       className: nginx
       annotations:
         cert-manager.io/cluster-issuer: letsencrypt-prod
-        external-dns.alpha.kubernetes.io/hostname: app.upright.eudi-adorsys.com,fra.upright.eudi-adorsys.com
+        external-dns.alpha.kubernetes.io/hostname: "app.{{ .Values.global.hostname }},{{ .Values.global.siteSubdomain }}.{{ .Values.global.hostname }}"
       hosts:
-        - host: app.upright.eudi-adorsys.com
+        - host: "app.{{ .Values.global.hostname }}"
           paths:
             - path: /
               pathType: Prefix
               service:
                 identifier: main
                 port: http
-        - host: fra.upright.eudi-adorsys.com
+        - host: "{{ .Values.global.siteSubdomain }}.{{ .Values.global.hostname }}"
           paths:
             - path: /
               pathType: Prefix
@@ -153,8 +150,8 @@ app-template:
       tls:
         - secretName: upright-eudi-adorsys-tls
           hosts:
-            - app.upright.eudi-adorsys.com
-            - fra.upright.eudi-adorsys.com
+            - "app.{{ .Values.global.hostname }}"
+            - "{{ .Values.global.siteSubdomain }}.{{ .Values.global.hostname }}"
 
   persistence:
     storage:
@@ -198,65 +195,21 @@ app-template:
       includeChecksumInControllers:
         - main
       data:
-        http_probes.yml: |
-          # HTTP Probe Definitions
-          # Add your HTTP health check probes here
-          #
-          # Required fields:
-          #   - name: Unique identifier for the probe
-          #   - url: The URL to check
-          #
-          # Optional fields:
-          #   - expected_status: HTTP status code to expect (default: 200-399)
-          #   - alert_severity: Alert severity when probe fails: medium, high (default), critical
-          #   - basic_auth_credentials: Key in Rails credentials for basic auth
-          #   - proxy: Key in Rails credentials for proxy settings
-
-          # Add a real target before enabling. An active probe is checked every 30 seconds
-          # and a failure is sent to the shared Alertmanager receiver.
-          # - name: Example Health Check
-          #   url: https://example.com
-
+        http_probes.yml: ""
     smtp-probes:
       enabled: true
       includeInChecksum: true
       includeChecksumInControllers:
         - main
       data:
-        smtp_probes.yml: |
-          # SMTP Probe Definitions
-          # Add your SMTP health check probes here
-          #
-          # Required fields:
-          #   - name: Unique identifier for the probe
-          #   - host: SMTP server hostname
-          #
-          # Optional fields:
-          #   - alert_severity: Alert severity when probe fails: medium, high (default), critical
-
-          # - name: Example Mail Server
-          #   host: mail.example.com
-
+        smtp_probes.yml: ""
     traceroute-probes:
       enabled: true
       includeInChecksum: true
       includeChecksumInControllers:
         - main
       data:
-        traceroute_probes.yml: |
-          # Traceroute Probe Definitions
-          # Add your traceroute probes here
-          #
-          # Required fields:
-          #   - name: Unique identifier for the probe
-          #   - host: Hostname or IP address to trace
-          #
-          # Optional fields:
-          #   - alert_severity: Alert severity when probe fails: medium, high (default), critical
-
-          # - name: Example Service
-          #   host: example.com
-
+        traceroute_probes.yml: ""
 
   serviceMonitor:
     main:

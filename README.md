@@ -62,14 +62,18 @@ The chart pins that digest on `defaultContainerOptions.image`, so the web contai
 ```bash
 helm dependency update ./charts/upright
 helm upgrade --install upright ./charts/upright \
-  --namespace datev-wallet
+  --namespace datev-wallet \
+  --values ./charts/upright/values-probes.yaml
 ```
+
+Helm loads the chart’s default `values.yaml` automatically and merges `values-probes.yaml`. Probe lists live in that file so they can grow without cluttering the rest of the deployment values. Changing a probe still updates the ConfigMap and rolls the Pod through the checksum already set in `values.yaml`.
 
 To override the pin without editing values:
 
 ```bash
 helm upgrade --install upright ./charts/upright \
   --namespace datev-wallet \
+  --values ./charts/upright/values-probes.yaml \
   --set app-template.controllers.main.defaultContainerOptions.image.tag=sha-<commit> \
   --set app-template.controllers.main.defaultContainerOptions.image.digest=sha256:<hex>
 ```
@@ -103,7 +107,7 @@ Local development reads `ADMIN_PASSWORD` from `.env`, which defaults to `admin`.
 
 The namespace also needs a pull secret named `ghcr-pull-secret` so the cluster can pull the image from GHCR.
 
-Probe YAML files are mounted from chart ConfigMaps at `/rails/probes/<file>`. The base release ships with no live target. Add a target before expecting application alerts.
+Probe YAML files are mounted from chart ConfigMaps at `/rails/probes/<file>`. The payloads are in `charts/upright/values-probes.yaml`. The base release ships with no live target. Add a target before expecting application alerts.
 
 ### SQLite backup and restore
 
@@ -113,28 +117,38 @@ For an EBS snapshot, stop the single Upright Pod first so SQLite is quiescent, t
 
 ```bash
 kubectl scale -n datev-wallet deploy/upright --replicas=0
+kubectl wait -n datev-wallet --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
 PV=$(kubectl get pvc upright -n datev-wallet -o jsonpath='{.spec.volumeName}')
 VOLUME_ID=$(kubectl get pv "$PV" -o jsonpath='{.spec.csi.volumeHandle}')
+trap 'kubectl scale -n datev-wallet deploy/upright --replicas=1' EXIT
 aws ec2 create-snapshot \
   --volume-id "$VOLUME_ID" \
   --description "Upright datev-wallet SQLite backup" \
   --tag-specifications 'ResourceType=snapshot,Tags=[{Key=Name,Value=upright-datev-wallet}]'
 kubectl scale -n datev-wallet deploy/upright --replicas=1
+trap - EXIT
 ```
 
 Wait for the snapshot to reach `completed` in the EC2 console or with `aws ec2 describe-snapshots`. To restore from an EBS snapshot, create a replacement EBS volume from that snapshot in the EKS node's Availability Zone and restore it through a PV/PVC before starting Upright. The tar backup below is the documented in-place restore path.
 
-Backup, with the release name `upright` in `datev-wallet`:
+Backup, with the release name `upright` in `datev-wallet` (stop the app first so SQLite is quiescent):
 
 ```bash
-kubectl exec -n datev-wallet deploy/upright -c web -- \
-  tar -C /rails/storage -czf - . > upright-storage-$(date -u +%Y%m%dT%H%M%SZ).tgz
+kubectl scale -n datev-wallet deploy/upright --replicas=0
+kubectl wait -n datev-wallet --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
+kubectl run -n datev-wallet upright-backup --rm -i --restart=Never \
+  --image=busybox:1.36 --overrides='{"spec":{"containers":[{"name":"backup","image":"busybox:1.36","command":["sh","-c","tar -C /rails/storage -czf - ."],"volumeMounts":[{"name":"storage","mountPath":"/rails/storage"}]}],"volumes":[{"name":"storage","persistentVolumeClaim":{"claimName":"upright"}}]}}' \
+  > upright-storage-$(date -u +%Y%m%dT%H%M%SZ).tgz
+kubectl scale -n datev-wallet deploy/upright --replicas=1
 ```
 
-Restore into a running Pod that already mounts the claim:
+Restore into a fresh claim (app stopped):
 
 ```bash
-kubectl exec -i -n datev-wallet deploy/upright -c web -- \
-  tar -C /rails/storage -xzf - < upright-storage-YYYYMMDDTHHMMSSZ.tgz
-kubectl rollout restart -n datev-wallet deploy/upright
+kubectl scale -n datev-wallet deploy/upright --replicas=0
+kubectl wait -n datev-wallet --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
+kubectl run -n datev-wallet upright-restore --rm -i --restart=Never \
+  --image=busybox:1.36 --overrides='{"spec":{"containers":[{"name":"restore","image":"busybox:1.36","command":["sh","-c","tar -C /rails/storage -xzf -"],"volumeMounts":[{"name":"storage","mountPath":"/rails/storage"}]}],"volumes":[{"name":"storage","persistentVolumeClaim":{"claimName":"upright"}}]}}' \
+  < upright-storage-YYYYMMDDTHHMMSSZ.tgz
+kubectl scale -n datev-wallet deploy/upright --replicas=1
 ```

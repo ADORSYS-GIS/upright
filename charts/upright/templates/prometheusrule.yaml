@@ -62,7 +62,7 @@ spec:
           annotations:
             summary: "HTTP probes missing from {{ `{{ $labels.site_city }}` }}"
             description: "{{ `{{ $labels.site_city }}` }} ({{ `{{ $labels.site_code }}` }}) stopped reporting HTTP probe metrics."
-            upright: "https://{{ `{{ $labels.site_code }}` }}.{{ .Values.hostname }}/?probe_type=http"
+            upright: "https://{{ `{{ $labels.site_code }}` }}.{{ .Values.global.hostname }}/?probe_type=http"
           expr: |
             count by (site_code, site_city) (max_over_time(upright_probe_up{type="http"}[1h]))
             unless
