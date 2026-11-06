@@ -113,14 +113,17 @@ Probe YAML files are mounted from chart ConfigMaps at `/rails/probes/<file>`. Th
 
 The app PVC uses StorageClass `high-performance`. That class has reclaim policy `Delete`, so deleting the claim deletes the volume. The chart sets `retain: true` on the claim so a Helm uninstall keeps the PVC object. Treat the volume as production data only after a restore has been practised.
 
-For an EBS snapshot, stop the single Upright Pod first so SQLite is quiescent, then snapshot the EBS volume backing the `upright` claim. Run this from an AWS-authenticated shell with `kubectl` access:
+For an EBS snapshot, stop the single Upright Pod first so SQLite is quiescent, then snapshot the EBS volume backing the `upright` claim. Run this from an AWS-authenticated Bash shell with `kubectl` access. The recovery trap is installed before scaling down; `set -euo pipefail` makes the block fail fast, and a failure restores Upright instead of leaving it offline or taking a snapshot before a confirmed stop.
 
 ```bash
+set -euo pipefail
+trap 'kubectl scale -n datev-wallet deploy/upright --replicas=1' EXIT
 kubectl scale -n datev-wallet deploy/upright --replicas=0
 kubectl wait -n datev-wallet --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
 PV=$(kubectl get pvc upright -n datev-wallet -o jsonpath='{.spec.volumeName}')
 VOLUME_ID=$(kubectl get pv "$PV" -o jsonpath='{.spec.csi.volumeHandle}')
-trap 'kubectl scale -n datev-wallet deploy/upright --replicas=1' EXIT
+: "${PV:?resolved PVC has no bound volume}"
+: "${VOLUME_ID:?resolved PV has no CSI volume handle}"
 aws ec2 create-snapshot \
   --volume-id "$VOLUME_ID" \
   --description "Upright datev-wallet SQLite backup" \
@@ -134,21 +137,25 @@ Wait for the snapshot to reach `completed` in the EC2 console or with `aws ec2 d
 Backup, with the release name `upright` in `datev-wallet` (stop the app first so SQLite is quiescent):
 
 ```bash
+set -euo pipefail
+trap 'kubectl scale -n datev-wallet deploy/upright --replicas=1' EXIT
 kubectl scale -n datev-wallet deploy/upright --replicas=0
 kubectl wait -n datev-wallet --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
 kubectl run -n datev-wallet upright-backup --rm -i --restart=Never \
   --image=busybox:1.36 --overrides='{"spec":{"containers":[{"name":"backup","image":"busybox:1.36","command":["sh","-c","tar -C /rails/storage -czf - ."],"volumeMounts":[{"name":"storage","mountPath":"/rails/storage"}]}],"volumes":[{"name":"storage","persistentVolumeClaim":{"claimName":"upright"}}]}}' \
   > upright-storage-$(date -u +%Y%m%dT%H%M%SZ).tgz
 kubectl scale -n datev-wallet deploy/upright --replicas=1
+trap - EXIT
 ```
 
-Restore into a fresh claim (app stopped):
+In-place restore into the existing `upright` PVC (app stopped). This clears `/rails/storage` before extracting the archive so the restored SQLite databases are not mixed with partial or stale files. A restore failure leaves Upright scaled to zero; fix the issue and rerun the restore before starting the app.
 
 ```bash
+set -euo pipefail
 kubectl scale -n datev-wallet deploy/upright --replicas=0
 kubectl wait -n datev-wallet --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
 kubectl run -n datev-wallet upright-restore --rm -i --restart=Never \
-  --image=busybox:1.36 --overrides='{"spec":{"containers":[{"name":"restore","image":"busybox:1.36","command":["sh","-c","tar -C /rails/storage -xzf -"],"volumeMounts":[{"name":"storage","mountPath":"/rails/storage"}]}],"volumes":[{"name":"storage","persistentVolumeClaim":{"claimName":"upright"}}]}}' \
+  --image=busybox:1.36 --overrides='{"spec":{"containers":[{"name":"restore","image":"busybox:1.36","command":["sh","-c","find /rails/storage -mindepth 1 -delete && tar -C /rails/storage -xzf -"],"volumeMounts":[{"name":"storage","mountPath":"/rails/storage"}]}],"volumes":[{"name":"storage","persistentVolumeClaim":{"claimName":"upright"}}]}}' \
   < upright-storage-YYYYMMDDTHHMMSSZ.tgz
 kubectl scale -n datev-wallet deploy/upright --replicas=1
 ```
