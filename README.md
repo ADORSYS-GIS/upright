@@ -148,14 +148,23 @@ kubectl scale -n datev-wallet deploy/upright --replicas=1
 trap - EXIT
 ```
 
-In-place restore into the existing `upright` PVC (app stopped). This clears `/rails/storage` before extracting the archive so the restored SQLite databases are not mixed with partial or stale files. A restore failure leaves Upright scaled to zero; fix the issue and rerun the restore before starting the app.
+In-place restore into the existing `upright` PVC (app stopped). Validate the archive on the operator machine first (`gzip -t`, tar listing, and the five production SQLite files). In the helper Pod the archive is extracted into `/rails/storage/.restore-staging` and those files are checked again before anything live is moved aside. Only then are the previous files moved to `.restore-previous` and the staging contents promoted. A truncated or incomplete archive therefore leaves the previous databases in place. If `.restore-previous` is already present, the helper Pod aborts without deleting it so a rerun cannot discard an interrupted swap. A restore failure leaves Upright scaled to zero; do not scale back up until the PVC contains a complete database set.
 
 ```bash
 set -euo pipefail
+ARCHIVE=upright-storage-YYYYMMDDTHHMMSSZ.tgz
+test -s "$ARCHIVE"
+gzip -t "$ARCHIVE"
+listing=$(tar -tzf "$ARCHIVE")
+for f in production.sqlite3 production_persistent.sqlite3 production_cache.sqlite3 production_queue.sqlite3 production_cable.sqlite3; do
+  printf '%s\n' "$listing" | grep -Eq "(^|/)${f}$" || { echo "archive missing $f" >&2; exit 1; }
+done
 kubectl scale -n datev-wallet deploy/upright --replicas=0
 kubectl wait -n datev-wallet --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
 kubectl run -n datev-wallet upright-restore --rm -i --restart=Never \
-  --image=busybox:1.36 --overrides='{"spec":{"containers":[{"name":"restore","image":"busybox:1.36","command":["sh","-c","find /rails/storage -mindepth 1 -delete && tar -C /rails/storage -xzf -"],"volumeMounts":[{"name":"storage","mountPath":"/rails/storage"}]}],"volumes":[{"name":"storage","persistentVolumeClaim":{"claimName":"upright"}}]}}' \
-  < upright-storage-YYYYMMDDTHHMMSSZ.tgz
+  --image=busybox:1.36 --overrides='{"spec":{"containers":[{"name":"restore","image":"busybox:1.36","command":["sh","-c","set -eu; stg=/rails/storage/.restore-staging; prev=/rails/storage/.restore-previous; if [ -d $prev ]; then echo interrupted restore: $prev exists >&2; exit 1; fi; rm -rf $stg; mkdir -p $stg; tar -C $stg -xzf -; for f in production.sqlite3 production_persistent.sqlite3 production_cache.sqlite3 production_queue.sqlite3 production_cable.sqlite3; do test -s $stg/$f || exit 1; done; mkdir $prev; for p in /rails/storage/*; do [ -e $p ] || continue; mv $p $prev/; done; for p in $stg/*; do [ -e $p ] || continue; mv $p /rails/storage/; done; rmdir $stg; rm -rf $prev"],"volumeMounts":[{"name":"storage","mountPath":"/rails/storage"}]}],"volumes":[{"name":"storage","persistentVolumeClaim":{"claimName":"upright"}}]}}' \
+  < "$ARCHIVE"
 kubectl scale -n datev-wallet deploy/upright --replicas=1
 ```
+
+If the helper Pod exits because `.restore-previous` exists, an earlier swap was interrupted. Inspect `/rails/storage`, `.restore-previous`, and `.restore-staging` before retrying. To return to the pre-restore databases, move the files from `.restore-previous` back to `/rails/storage` and remove the two restore directories. Only then rerun the restore, or start Upright if you have abandoned the restore.
