@@ -8,7 +8,7 @@ services:
         required: false
     environment:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
-      SITE_SUBDOMAIN: lon
+      SITE_SUBDOMAIN: ${SITE_SUBDOMAIN:-fra}
       PORT: "3000"
       PROMETHEUS_URL: http://prometheus:9090
       ALERTMANAGER_URL: http://alertmanager:9093
@@ -45,7 +45,7 @@ services:
         required: false
     environment:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
-      SITE_SUBDOMAIN: lon
+      SITE_SUBDOMAIN: ${SITE_SUBDOMAIN:-fra}
       PROMETHEUS_URL: http://prometheus:9090
       ALERTMANAGER_URL: http://alertmanager:9093
     volumes:
