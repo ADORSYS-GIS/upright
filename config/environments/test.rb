@@ -52,6 +52,5 @@ Rails.application.configure do
   config.action_controller.raise_on_missing_callback_actions = true
 
   # Allow production hostnames in route tests.
-  config.hosts << "app.upright.eudi-adorsys.com"
-  config.hosts << "fra.upright.eudi-adorsys.com"
+  config.hosts = [ "localhost", "127.0.0.1", ".upright.localhost" ]
 end
