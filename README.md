@@ -20,14 +20,14 @@ That command installs gems, prepares the primary, persistent, and queue database
 
 When the log shows `Listening on http://0.0.0.0:3000`, open a host under `upright.localhost`. The engine allows that name and its subdomains. `http://localhost:3000` is rejected.
 
-Upright uses `app.<base-hostname>` for the admin UI and `<site-code>.<base-hostname>` for that site's probe results. The local base hostname is `upright.localhost`. `lon` is the site code configured in `config/sites.yml` for London, the location where probes run. It is the current site code, not a fixed Upright hostname. Another site uses its own code as the subdomain.
+Upright uses `app.<base-hostname>` for the admin UI and `<site-code>.<base-hostname>` for that site's probe results. The local base hostname is `upright.localhost`. `fra` is the site code configured in `config/sites.yml` for Frankfurt, the location where probes run. It is the current site code, not a fixed Upright hostname. Another site uses its own code as the subdomain.
 
 Signed out, both app URLs redirect to the sign-in page at http://app.upright.localhost:3000/session/new. That redirect is the expected result. Sign in as `admin` with `ADMIN_PASSWORD` (default `admin`). The same session works on both hosts.
 
 | URL | Role | Signed out | Signed in |
 | --- | --- | --- | --- |
 | http://app.upright.localhost:3000 | Admin UI (`app.<base-hostname>`) | Sign-in page | Sites, the admin UI |
-| http://lon.upright.localhost:3000 | Probe results for site code `lon` | Sign-in page | Probe results for London |
+| http://fra.upright.localhost:3000 | Probe results for site code `fra` | Sign-in page | Probe results for Frankfurt |
 
 Docker Compose also publishes the monitoring UIs on localhost:
 
@@ -57,22 +57,33 @@ docker run --rm --user 1000:1000 --shm-size=1g --security-opt seccomp=docker/sec
 
 Pushing `main` to [ADORSYS-GIS/upright](https://github.com/ADORSYS-GIS/upright) builds `ghcr.io/adorsys-gis/upright/upright` with Chromium and publishes the commit SHA. The workflow summary records the image digest, `ghcr.io/adorsys-gis/upright/upright@sha256:...`. The workflow does not publish a `latest` tag.
 
-Pass that digest to Helm. With `image.digest` set, the web container, the jobs container, and the `db-prepare` init container use `repository@digest`. An empty `image.digest` leaves the chart on `image.tag` from `charts/upright/values.yaml`, which is `latest`.
+The chart pins that digest on `defaultContainerOptions.image`, so the web container, the jobs container, and the `db-prepare` init container use `repository:tag@digest`. The pin in `charts/upright/values.yaml` is the image published from the browser-capable build (`sha-3774812f19b3e49467a7821a1e261e67c9189622`). Bump the digest (and the matching SHA tag) after a new `main` publish.
+
+```bash
+helm dependency update ./charts/upright
+helm upgrade --install upright ./charts/upright \
+  --namespace datev-wallet \
+  --values ./charts/upright/values-probes.yaml
+```
+
+Helm loads the chart’s default `values.yaml` automatically and merges `values-probes.yaml`. Probe lists live in that file so they can grow without cluttering the rest of the deployment values. Changing a probe still updates the ConfigMap and rolls the Pod through the checksum already set in `values.yaml`.
+
+To override the pin without editing values:
 
 ```bash
 helm upgrade --install upright ./charts/upright \
   --namespace datev-wallet \
-  --set image.digest=sha256:<hex>
+  --values ./charts/upright/values-probes.yaml \
+  --set app-template.controllers.main.defaultContainerOptions.image.tag=sha-<commit> \
+  --set app-template.controllers.main.defaultContainerOptions.image.digest=sha256:<hex>
 ```
 
-`<hex>` is the hex after `@sha256:` in the workflow summary. The three containers then use `ghcr.io/adorsys-gis/upright/upright@sha256:<hex>`.
+One Pod runs the web process and the probe jobs from the same image. Both mount a persistent volume at `/rails/storage` on the `high-performance` StorageClass, so SQLite data survives a restart. The chart does not ship Prometheus or Alertmanager. A ServiceMonitor on port `9394` and a PrometheusRule, both labeled `release: kube-prometheus-stack`, are selected by the cluster Prometheus. Alerts go to the shared `platform-webhook` receiver. Ingress publishes:
 
-One Pod runs the web process and the probe jobs from the same image. Both mount a persistent volume at `/rails/storage`, so SQLite data survives a restart. Prometheus and Alertmanager run beside the app. Ingress publishes:
+- https://app.upright.eudi-adorsys.com — admin sign-in
+- https://fra.upright.eudi-adorsys.com — Frankfurt site page
 
-- https://app.eudi-adorsys.com — admin sign-in
-- https://lon.eudi-adorsys.com — London site page
-
-TLS uses the existing wildcard secret `eudi-adorsys-tls`. Settings live in `charts/upright/values.yaml`.
+TLS uses the secret `upright-eudi-adorsys-tls`, issued by `letsencrypt-prod` for those two hosts. Settings live in `charts/upright/values.yaml`.
 
 ### Releases
 
@@ -84,17 +95,78 @@ Running `bin/rails db:prepare` from a local checkout uses the development databa
 
 ### Secrets
 
-Add these properties to the existing AWS secret `datev-wallet-secrets` in `eu-central-1`. The chart copies each AWS property into a container environment variable through `datev-secret-store`. The running containers read those environment names. All four must be present or the app will not start.
+Add these properties to the existing AWS secret `datev-wallet-secrets` in `eu-central-1`. The chart creates an Upright-owned namespaced `SecretStore` and copies each AWS property into a container environment variable. The running containers read those environment names. All three must be present or the app will not start.
 
 | AWS property | Container environment | Value |
 | --- | --- | --- |
 | `UPRIGHT_RAILS_MASTER_KEY` | `RAILS_MASTER_KEY` | The single line in `config/master.key`. This decrypts `config/credentials.yml.enc`. |
 | `UPRIGHT_ADMIN_PASSWORD` | `ADMIN_PASSWORD` | Password for the `admin` user. |
 | `UPRIGHT_PROMETHEUS_OTLP_TOKEN` | `PROMETHEUS_OTLP_TOKEN` | One shared machine token, generated once with `openssl rand -hex 64`. Every pod uses this same value. People sign in with the admin password. |
-| `UPRIGHT_DISCORD_WEBHOOK_URL` | `DISCORD_WEBHOOK_URL` | Webhook URL for the Discord alerts channel. |
 
 Local development reads `ADMIN_PASSWORD` from `.env`, which defaults to `admin`. Deployment maps `UPRIGHT_ADMIN_PASSWORD` to `ADMIN_PASSWORD`. There is no production default. If `ADMIN_PASSWORD` is unset, sign-in has no credential, so the local password is never used in production.
 
 The namespace also needs a pull secret named `ghcr-pull-secret` so the cluster can pull the image from GHCR.
 
-Active probes are listed in `probes/http_probes.yml`. The file ships with no live check. Add a target before expecting alerts.
+Probe YAML files are mounted from chart ConfigMaps at `/rails/probes/<file>`. The payloads are in `charts/upright/values-probes.yaml`. The base release ships with no live target. Add a target before expecting application alerts.
+
+### SQLite backup and restore
+
+The app PVC uses StorageClass `high-performance`. That class has reclaim policy `Delete`, so deleting the claim deletes the volume. The chart sets `retain: true` on the claim so a Helm uninstall keeps the PVC object. Treat the volume as production data only after a restore has been practised.
+
+For an EBS snapshot, stop the single Upright Pod first so SQLite is quiescent, then snapshot the EBS volume backing the `upright` claim. Run this from an AWS-authenticated Bash shell with `kubectl` access. The recovery trap is installed before scaling down; `set -euo pipefail` makes the block fail fast, and a failure restores Upright instead of leaving it offline or taking a snapshot before a confirmed stop.
+
+```bash
+set -euo pipefail
+trap 'kubectl scale -n datev-wallet deploy/upright --replicas=1' EXIT
+kubectl scale -n datev-wallet deploy/upright --replicas=0
+kubectl wait -n datev-wallet --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
+PV=$(kubectl get pvc upright -n datev-wallet -o jsonpath='{.spec.volumeName}')
+VOLUME_ID=$(kubectl get pv "$PV" -o jsonpath='{.spec.csi.volumeHandle}')
+: "${PV:?resolved PVC has no bound volume}"
+: "${VOLUME_ID:?resolved PV has no CSI volume handle}"
+aws ec2 create-snapshot \
+  --volume-id "$VOLUME_ID" \
+  --description "Upright datev-wallet SQLite backup" \
+  --tag-specifications 'ResourceType=snapshot,Tags=[{Key=Name,Value=upright-datev-wallet}]'
+kubectl scale -n datev-wallet deploy/upright --replicas=1
+trap - EXIT
+```
+
+Wait for the snapshot to reach `completed` in the EC2 console or with `aws ec2 describe-snapshots`. To restore from an EBS snapshot, create a replacement EBS volume from that snapshot in the EKS node's Availability Zone and restore it through a PV/PVC before starting Upright. The tar backup below is the documented in-place restore path.
+
+Backup, with the release name `upright` in `datev-wallet` (stop the app first so SQLite is quiescent):
+
+```bash
+set -euo pipefail
+trap 'kubectl scale -n datev-wallet deploy/upright --replicas=1' EXIT
+kubectl scale -n datev-wallet deploy/upright --replicas=0
+kubectl wait -n datev-wallet --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
+kubectl run -n datev-wallet upright-backup --rm -i --restart=Never \
+  --image=busybox:1.36 --overrides='{"spec":{"containers":[{"name":"backup","image":"busybox:1.36","command":["sh","-c","tar -C /rails/storage -czf - ."],"volumeMounts":[{"name":"storage","mountPath":"/rails/storage"}]}],"volumes":[{"name":"storage","persistentVolumeClaim":{"claimName":"upright"}}]}}' \
+  > upright-storage-$(date -u +%Y%m%dT%H%M%SZ).tgz
+kubectl scale -n datev-wallet deploy/upright --replicas=1
+trap - EXIT
+```
+
+In-place restore into the existing `upright` PVC (app stopped). Validate the archive on the operator machine first (`gzip -t`, tar listing, and the five production SQLite files). In the helper Pod the archive is extracted into `/rails/storage/.restore-staging` and those files are checked again before anything live is moved aside. Only then are the previous files moved to `.restore-previous` and the staging contents promoted. A truncated or incomplete archive therefore leaves the previous databases in place. Non-zero size is not proof the files are usable, so `.restore-previous` is kept until Upright becomes Ready on the restored databases. If `.restore-previous` is already present, the helper Pod aborts without deleting it so a rerun cannot discard an interrupted swap.
+
+```bash
+set -euo pipefail
+ARCHIVE=upright-storage-YYYYMMDDTHHMMSSZ.tgz
+test -s "$ARCHIVE"
+gzip -t "$ARCHIVE"
+listing=$(tar -tzf "$ARCHIVE")
+for f in production.sqlite3 production_persistent.sqlite3 production_cache.sqlite3 production_queue.sqlite3 production_cable.sqlite3; do
+  printf '%s\n' "$listing" | grep -Eq "(^|/)${f}$" || { echo "archive missing $f" >&2; exit 1; }
+done
+kubectl scale -n datev-wallet deploy/upright --replicas=0
+kubectl wait -n datev-wallet --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
+kubectl run -n datev-wallet upright-restore --rm -i --restart=Never \
+  --image=busybox:1.36 --overrides='{"spec":{"securityContext":{"runAsUser":1000,"runAsGroup":1000,"fsGroup":1000},"containers":[{"name":"restore","image":"busybox:1.36","command":["sh","-c","set -eu; stg=/rails/storage/.restore-staging; prev=/rails/storage/.restore-previous; if [ -d $prev ]; then echo interrupted restore: $prev exists >&2; exit 1; fi; rm -rf $stg; mkdir -p $stg; tar -C $stg -xzf -; for f in production.sqlite3 production_persistent.sqlite3 production_cache.sqlite3 production_queue.sqlite3 production_cable.sqlite3; do test -s $stg/$f || exit 1; done; mkdir $prev; for p in /rails/storage/*; do [ -e $p ] || continue; mv $p $prev/; done; for p in $stg/*; do [ -e $p ] || continue; mv $p /rails/storage/; done; rmdir $stg"],"volumeMounts":[{"name":"storage","mountPath":"/rails/storage"}]}],"volumes":[{"name":"storage","persistentVolumeClaim":{"claimName":"upright"}}]}}' \
+  < "$ARCHIVE"
+kubectl scale -n datev-wallet deploy/upright --replicas=1
+kubectl rollout status -n datev-wallet deploy/upright --timeout=300s
+kubectl exec -n datev-wallet deploy/upright -c web -- rm -rf /rails/storage/.restore-previous
+```
+
+If restore or rollout fails, Upright is left with `.restore-previous` on the PVC. Do not delete that directory. Scale to zero, move the files from `.restore-previous` back to `/rails/storage`, remove `.restore-previous` and `.restore-staging`, then start Upright to return to the pre-restore databases, or inspect the restored files and retry. If the helper Pod exits because `.restore-previous` already exists, treat it the same way: inspect before retrying. A leftover `.restore-previous` after a successful Ready state is safe to remove; the app does not use that directory.
