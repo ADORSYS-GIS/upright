@@ -46,3 +46,10 @@ Upright.configure do |config|
   # Register custom probe types (built-in types: http, playwright, smtp, traceroute)
   # config.probe_types.register :ftp_file, name: "FTP File", icon: "📂"
 end
+
+# Production hosts use subdomains on upright.eudi-adorsys.com (app., fra.), so
+# Rails needs tld_length 2 to extract the subdomain correctly. Keep 1 locally
+# for upright.localhost.
+if Rails.env.production?
+  Rails.application.config.action_dispatch.tld_length = 2
+end
