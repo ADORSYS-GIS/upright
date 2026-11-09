@@ -1,4 +1,6 @@
 # See https://docs.docker.com/engine/reference/builder/#dockerignore-file for more about ignoring files.
+# If you change exclusions here, update the ignore list in the detect-changes job
+# in .github/workflows/publish-images.yml to match.
 
 # Ignore git directory.
 /.git/

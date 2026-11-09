@@ -9,9 +9,62 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-push:
+  detect-changes:
+    name: Detect relevant changes
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      should-build: ${{ steps.check.outputs.should-build }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
+      - name: Check for changes to Docker build context
+        id: check
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # Decides whether a push to main changes anything that can affect the image.
+          #
+          # The ignore list below must mirror the exclusions in .dockerignore.
+          # Update both together. Do NOT list the Dockerfile, .dockerignore, or
+          # .github/workflows here: they are image inputs. Anything not listed
+          # triggers a build, so an omission costs an extra build, never a missed one.
+          # Tags and manual dispatches always build.
+          ZERO=0000000000000000000000000000000000000000
+          if [ "$EVENT" != push ] || [ "$REF" != refs/heads/main ] || [ "$BEFORE" = "$ZERO" ]; then
+            echo "should-build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! CHANGED=$(git diff --name-only "$BEFORE" HEAD -- . \
+              ':!.git' ':!.gitignore' ':!.bundle' ':!.env*' ':!log' ':!tmp' ':!storage' \
+              ':!node_modules' ':!charts' ':!config/deploy*.yml' ':!.kamal' \
+              ':!.devcontainer' ':!test' ':!README*' ':!docker-compose.yml' \
+              ':!Procfile.dev' ':!docker'); then
+            echo "Diff failed; building to be safe."
+            echo "should-build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -n "$CHANGED" ]; then
+            echo "Relevant files changed:"; echo "$CHANGED"
+            echo "should-build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Only files excluded from the build context changed; skipping image build."
+            echo "should-build=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-and-push:
+    name: Build and Push Image
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.should-build == 'true'
     permissions:
       contents: read
       packages: write
@@ -38,6 +91,8 @@ jobs:
           tags: |
             type=sha,format=long
             type=semver,pattern={{version}}
+          flavor: |
+            latest=false
 
       - name: Build and push image
         id: build
