@@ -1,6 +1,7 @@
 # See https://docs.docker.com/engine/reference/builder/#dockerignore-file for more about ignoring files.
-# If you change exclusions here, update the ignore list in the detect-changes job
-# in .github/workflows/publish-images.yml to match.
+# The image publishing workflow reads these rules with Moby's Docker-compatible
+# pattern matcher. Dockerfile, .dockerignore, and .github/image-build-args are
+# explicit image inputs.
 
 # Ignore git directory.
 /.git/
@@ -40,6 +41,23 @@
 
 # Ignore CI service files.
 /.github
+
+# Local toolchain and lint configuration.
+/.ruby-version
+/mise.toml
+/.rubocop.yml
+
+# Development and CI-only executables/configuration.
+/bin/brakeman
+/bin/bundler-audit
+/bin/ci
+/bin/dev
+/bin/importmap
+/bin/kamal
+/bin/rubocop
+/bin/setup
+/config/bundler-audit.yml
+/config/ci.rb
 
 # Helm chart is not needed inside the Rails image.
 /charts
