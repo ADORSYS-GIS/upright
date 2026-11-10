@@ -43,10 +43,11 @@ jobs:
           fi
 
           if ! CHANGED=$(git diff --name-only "$BEFORE" HEAD -- . \
-              ':!.git' ':!.gitignore' ':!.bundle' ':!.env*' ':!log' ':!tmp' ':!storage' \
-              ':!node_modules' ':!charts' ':!config/deploy*.yml' ':!.kamal' \
-              ':!.devcontainer' ':!test' ':!README*' ':!docker-compose.yml' \
-              ':!Procfile.dev' ':!docker'); then
+              ':!.git' ':!.gitignore' ':!.bundle' ':!.env*' ':!/log/*' ':!/tmp/*' ':!/storage/*' \
+              ':!/node_modules' ':!/charts' ':!/config/deploy*.yml' ':!/.kamal' \
+              ':!/.devcontainer' ':!/test' ':!/README*' ':!/docker-compose.yml' \
+              ':!/Procfile.dev' ':!/docker' ':!/config/master.key' ':!/config/credentials/*.key' \
+              ':!/app/assets/builds/*' ':!/public/assets'); then
             echo "Diff failed; building to be safe."
             echo "should-build=true" >> "$GITHUB_OUTPUT"
             exit 0
