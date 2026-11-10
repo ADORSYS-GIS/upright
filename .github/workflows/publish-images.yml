@@ -53,8 +53,20 @@ jobs:
             exit 0
           fi
 
-          if [ -n "$CHANGED" ]; then
-            echo "Relevant files changed:"; echo "$CHANGED"
+          # .dockerignore re-includes these .keep files. Git exclude pathspecs
+          # run last, and * matches /, so they cannot be restored in the list
+          # above. Diff them on their own.
+          if ! KEEP=$(git diff --name-only "$BEFORE" HEAD -- \
+              log/.keep tmp/.keep tmp/pids/.keep tmp/storage/.keep \
+              storage/.keep app/assets/builds/.keep); then
+            echo "Diff failed; building to be safe."
+            echo "should-build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -n "$CHANGED" ] || [ -n "$KEEP" ]; then
+            echo "Relevant files changed:"
+            printf '%s\n' "$CHANGED" "$KEEP" | sed '/^$/d'
             echo "should-build=true" >> "$GITHUB_OUTPUT"
           else
             echo "Only files excluded from the build context changed; skipping image build."
