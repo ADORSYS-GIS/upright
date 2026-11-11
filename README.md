@@ -57,7 +57,7 @@ docker run --rm --user 1000:1000 --shm-size=1g --security-opt seccomp=docker/sec
 
 Pushing `main` to [ADORSYS-GIS/upright](https://github.com/ADORSYS-GIS/upright) builds `ghcr.io/adorsys-gis/upright/upright` with Chromium and publishes the commit SHA. The workflow summary records the image digest, `ghcr.io/adorsys-gis/upright/upright@sha256:...`. The workflow does not publish a `latest` tag.
 
-The chart pins that digest on `defaultContainerOptions.image`, so the web container, the jobs container, and the `db-prepare` init container use `repository:tag@digest`. The pin in `charts/upright/values.yaml` is the image published from the browser-capable build (`sha-450596ef375689a1a715df07259e05bc5bf0f07e`). Bump the digest (and the matching SHA tag) after a new `main` publish.
+A push to `main` builds and publishes an image when `Dockerfile`, `.dockerignore`, `.github/image-build-args`, or any file included by `.dockerignore` changes. Changes only to files excluded by `.dockerignore` and not listed as explicit image inputs (for example Helm charts, README, or ordinary GitHub workflow logic) skip the image build. The detector uses Docker's ignore-pattern matcher and tests its include/exclude cases in CI. The digest pinned in `charts/upright/values.yaml` therefore refers to the most recent image build, not necessarily the latest commit. Version tags (`v*.*.*`) and manual workflow dispatches always publish.
 
 ```bash
 helm dependency update ./charts/upright

@@ -9,9 +9,71 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-push:
+  detect-changes:
+    name: Detect relevant changes
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      should-build: ${{ steps.check.outputs.should-build }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
+      - name: Set up Go for image input detection
+        id: setup-go
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/setup-go@v7
+        continue-on-error: true
+        with:
+          go-version-file: .github/scripts/image-change-detector/go.mod
+          cache: true
+          cache-dependency-path: .github/scripts/image-change-detector/go.sum
+
+      - name: Test image input detector
+        id: detector-tests
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.setup-go.outcome == 'success'
+        working-directory: .github/scripts/image-change-detector
+        continue-on-error: true
+        run: go test ./...
+
+      - name: Check for changes to Docker build context
+        id: check
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BEFORE: ${{ github.event.before }}
+          GO_SETUP_OUTCOME: ${{ steps.setup-go.outcome }}
+          DETECTOR_TEST_OUTCOME: ${{ steps.detector-tests.outcome }}
+        working-directory: .github/scripts/image-change-detector
+        run: |
+          ZERO=0000000000000000000000000000000000000000
+          if [ "$EVENT" != push ] || [ "$REF" != refs/heads/main ] || [ "$BEFORE" = "$ZERO" ]; then
+            echo "should-build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$GO_SETUP_OUTCOME" != success ] || [ "$DETECTOR_TEST_OUTCOME" != success ]; then
+            echo "Image input detector unavailable or failed tests; building to be safe."
+            echo "should-build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! SHOULD_BUILD=$(go run . "$BEFORE" HEAD); then
+            echo "Diff failed; building to be safe."
+            echo "should-build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "should-build=$SHOULD_BUILD" >> "$GITHUB_OUTPUT"
+
+  build-and-push:
+    name: Build and Push Image
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.should-build == 'true'
     permissions:
       contents: read
       packages: write
@@ -38,6 +100,17 @@ jobs:
           tags: |
             type=sha,format=long
             type=semver,pattern={{version}}
+          flavor: |
+            latest=false
+
+      - name: Read image build arguments
+        id: build-args
+        run: |
+          {
+            echo 'args<<BUILD_ARGS_EOF'
+            cat .github/image-build-args
+            echo BUILD_ARGS_EOF
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and push image
         id: build
@@ -46,8 +119,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          build-args: |
-            INSTALL_PLAYWRIGHT=1
+          build-args: ${{ steps.build-args.outputs.args }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -55,6 +127,8 @@ jobs:
 
       - name: Record the image digest
         run: |
-          echo "Deploy this digest:" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "\`ghcr.io/${GITHUB_REPOSITORY,,}/upright@${{ steps.build.outputs.digest }}\`" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "Deploy this digest:"
+            echo ""
+            echo "\`ghcr.io/${GITHUB_REPOSITORY,,}/upright@${{ steps.build.outputs.digest }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
