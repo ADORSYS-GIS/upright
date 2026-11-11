@@ -12,9 +12,9 @@ import (
 func testMatcher(t *testing.T) *patternmatcher.PatternMatcher {
 	t.Helper()
 
-	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	root, err := repositoryRoot()
 	if err != nil {
-		t.Fatalf("find repository root from test directory: %v", err)
+		t.Fatalf("find repository root: %v", err)
 	}
 	file, err := os.Open(filepath.Join(root, ".dockerignore"))
 	if err != nil {

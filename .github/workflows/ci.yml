@@ -85,7 +85,7 @@ jobs:
       - name: Set up Go for image input detector tests
         uses: actions/setup-go@v7
         with:
-          go-version: '1.25'
+          go-version-file: .github/scripts/image-change-detector/go.mod
           cache: true
           cache-dependency-path: .github/scripts/image-change-detector/go.sum
 
