@@ -82,6 +82,17 @@ jobs:
       - name: Run the test suite
         run: bin/rails test
 
+      - name: Set up Go for image input detector tests
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: .github/scripts/image-change-detector/go.mod
+          cache: true
+          cache-dependency-path: .github/scripts/image-change-detector/go.sum
+
+      - name: Test image input detector
+        working-directory: .github/scripts/image-change-detector
+        run: go test ./...
+
   boot:
     runs-on: ubuntu-latest
     env:
