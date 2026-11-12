@@ -4,51 +4,52 @@ app-template:
       data:
         http_probes.yml: |
           # HTTP Probe Definitions
-          # Add your HTTP health check probes here
+          # Required: name, url
+          # Optional: expected_status (default 200-399), alert_severity, service,
+          #           basic_auth_credentials, proxy
           #
-          # Required fields:
-          #   - name: Unique identifier for the probe
-          #   - url: The URL to check
-          #
-          # Optional fields:
-          #   - expected_status: HTTP status code to expect (default: 200-399)
-          #   - alert_severity: Alert severity when probe fails: medium, high (default), critical
-          #   - basic_auth_credentials: Key in Rails credentials for basic auth
-          #   - proxy: Key in Rails credentials for proxy settings
+          # Keep in sync with probes/http_probes.yml for local development.
 
-          # Add a real target before enabling. An active probe is checked every 30 seconds
-          # and a failure is sent to the shared Alertmanager receiver.
-          # - name: Example Health Check
-          #   url: https://example.com
+          - name: EUDI Wallet
+            url: https://wallet.eudi-adorsys.com
+            service: eudi_wallet
+            alert_severity: high
+
+          - name: nginx proxy
+            url: https://proxy.eudi-adorsys.com
+            service: nginx_proxy
+            alert_severity: high
+
+          - name: Verifier POS demo
+            url: https://registry.eudi-adorsys.com
+            service: verifier_pos
+            alert_severity: high
+
+          - name: OID4VC Keycloak
+            url: https://keycloak-demo.solutions.adorsys.com/realms/oid4vc-vci
+            service: oid4vc_keycloak
+            alert_severity: high
+
+          - name: DATEV issuer
+            url: https://adorsys-gis.github.io/keycloak-oid4vc-mock-fe-datev/
+            service: datev_issuer
+            alert_severity: high
+
+          # Add once the public URL is known:
+          # - Keycloak issuer (POS demo), adorsys/keycloak-ssi-deployment
+          # - Digital payslip demo, ADORSYS-GIS/keycloak-oid4vc-digital-payslip-demo
+          # - EUDI-Wallet playground frontend, ADORSYS-GIS/fe-eudiw-playground
 
     smtp-probes:
       data:
         smtp_probes.yml: |
           # SMTP Probe Definitions
-          # Add your SMTP health check probes here
-          #
-          # Required fields:
-          #   - name: Unique identifier for the probe
-          #   - host: SMTP server hostname
-          #
-          # Optional fields:
-          #   - alert_severity: Alert severity when probe fails: medium, high (default), critical
-
-          # - name: Example Mail Server
-          #   host: mail.example.com
+          # Required: name, host
+          # Optional: alert_severity
 
     traceroute-probes:
       data:
         traceroute_probes.yml: |
           # Traceroute Probe Definitions
-          # Add your traceroute probes here
-          #
-          # Required fields:
-          #   - name: Unique identifier for the probe
-          #   - host: Hostname or IP address to trace
-          #
-          # Optional fields:
-          #   - alert_severity: Alert severity when probe fails: medium, high (default), critical
-
-          # - name: Example Service
-          #   host: example.com
+          # Required: name, host
+          # Optional: alert_severity

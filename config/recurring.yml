@@ -7,6 +7,10 @@ development:
     schedule: every minute
     command: "Upright::Probes::SMTPProbe.check_and_record_all_later"
 
+  datev_issuer_probe:
+    schedule: every 5 minutes
+    command: "Probes::Playwright::DatevIssuerProbe.check_and_record_later"
+
 production:
   http_probes:
     schedule: "*/30 * * * * *"
@@ -15,6 +19,10 @@ production:
   smtp_probes:
     schedule: "*/30 * * * * *"
     command: "Upright::Probes::SMTPProbe.check_and_record_all_later"
+
+  datev_issuer_probe:
+    schedule: every 5 minutes
+    command: "Probes::Playwright::DatevIssuerProbe.check_and_record_later"
 
   clear_solid_queue_finished_jobs:
     command: "SolidQueue::Job.clear_finished_in_batches(sleep_between_batches: 0.3)"

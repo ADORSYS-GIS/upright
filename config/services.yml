@@ -1,3 +1,27 @@
 # Services for the status page and the incident form.
-# Upright loads this file at boot. Leave the list empty until a service is defined.
-[]
+# `code` must match the `service:` field on HTTP probes and the Playwright
+# authenticator service name where a browser journey owns the uptime signal.
+
+- code: eudi_wallet
+  name: EUDI Wallet
+  public: true
+
+- code: nginx_proxy
+  name: nginx proxy
+  public: true
+
+- code: verifier_pos
+  name: Verifier POS demo
+  public: true
+
+- code: oid4vc_keycloak
+  name: OID4VC Keycloak
+  public: true
+
+- code: datev_issuer
+  name: DATEV issuer
+  public: true
+  # Browser journey also reports under this service; HTTP availability is the
+  # primary uptime signal until Playwright metrics are continuous.
+  uptime_probe_types:
+    - http

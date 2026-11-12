@@ -79,6 +79,11 @@ jobs:
       - name: Prepare the test databases
         run: bin/rails db:test:prepare
 
+      - name: Build Helm chart dependencies
+        run: |
+          helm repo add bjw-s-labs https://bjw-s-labs.github.io/helm-charts
+          helm dependency build ./charts/upright
+
       - name: Run the test suite
         run: bin/rails test
 
