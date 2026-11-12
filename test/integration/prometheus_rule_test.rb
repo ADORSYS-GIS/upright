@@ -10,7 +10,7 @@ class PrometheusRuleTest < ActionDispatch::IntegrationTest
       "upright",
       "./charts/upright",
       "--namespace",
-      "datev-wallet",
+      "monitoring",
       "--values",
       "./charts/upright/values-probes.yaml"
     )
