@@ -58,6 +58,32 @@ spec:
           labels:
             severity: critical
             group: upright
+        - alert: UprightHTTPProbesMissing
+          annotations:
+            summary: "HTTP probes missing - no metrics received"
+            description: "No HTTP probe metrics are being reported. Upright may be down or probes are stuck."
+            upright: "https://{{ include "upright.appHost" . }}/?probe_type=http"
+          expr: |
+            count by () (max_over_time(upright_probe_up{type="http"}[1h])) > 0
+            and
+            count by () (max_over_time(upright_probe_up{type="http"}[5m])) == 0
+          for: 5m
+          labels:
+            severity: critical
+            group: upright
+        - alert: UprightPlaywrightProbesMissing
+          annotations:
+            summary: "Playwright probes missing - no metrics received"
+            description: "No Playwright probe metrics are being reported. Browser probes may be stuck or Upright is down."
+            upright: "https://{{ include "upright.appHost" . }}/?probe_type=playwright"
+          expr: |
+            count by () (max_over_time(upright_probe_up{type="playwright"}[1h])) > 0
+            and
+            count by () (max_over_time(upright_probe_up{type="playwright"}[5m])) == 0
+          for: 30m
+          labels:
+            severity: critical
+            group: upright
         - alert: UprightHTTPSiteMissing
           annotations:
             summary: "HTTP probes missing from {{ `{{ $labels.site_city }}` }}"
@@ -68,6 +94,87 @@ spec:
             unless
             count by (site_code, site_city) (upright_probe_up{type="http"})
           for: 5m
+          labels:
+            severity: warning
+            group: upright
+        - alert: UprightPlaywrightSiteMissing
+          annotations:
+            summary: "Playwright probes missing from {{ `{{ $labels.site_city }}` }}"
+            description: "{{ `{{ $labels.site_city }}` }} ({{ `{{ $labels.site_code }}` }}) stopped reporting Playwright probe metrics. Probes may be stuck."
+            upright: "https://{{ `{{ $labels.site_code }}` }}.{{ .Values.global.hostname }}/?probe_type=playwright"
+          expr: |
+            count by (site_code, site_city) (max_over_time(upright_probe_up{type="playwright"}[1h]))
+            unless
+            count by (site_code, site_city) (upright_probe_up{type="playwright"})
+          for: 30m
+          labels:
+            severity: warning
+            group: upright
+    - name: upright_http_alerts
+      rules:
+        - alert: UprightHTTPProbeDown
+          annotations:
+            summary: "HTTP: {{ `{{ $labels.name }}` }} is DOWN"
+            description: "{{ `{{ $value | humanizePercentage }}` }} of regions report failure on {{ `{{ $labels.probe_target }}` }}"
+            upright: "https://{{ include "upright.appHost" . }}/?probe_type={{ `{{ $labels.type }}` }}&status=fail&probe_name={{ `{{ $labels.name | urlquery }}` }}"
+          expr: upright:probe_down_fraction{type="http"} > 0.5
+          labels:
+            severity: "{{ `{{ $labels.alert_severity }}` }}"
+            group: upright
+        - alert: UprightHTTPProbeDegraded
+          annotations:
+            summary: "HTTP: {{ `{{ $labels.name }}` }} degraded - {{ `{{ $value | humanizePercentage }}` }} of regions down"
+            description: "{{ `{{ $value | humanizePercentage }}` }} of regions report failure on {{ `{{ $labels.probe_target }}` }}"
+            upright: "https://{{ include "upright.appHost" . }}/?probe_type={{ `{{ $labels.type }}` }}&status=fail&probe_name={{ `{{ $labels.name | urlquery }}` }}"
+          expr: upright:probe_down_fraction{type="http"} > 0.25 and upright:probe_down_fraction{type="http"} <= 0.5
+          for: 5m
+          labels:
+            severity: warning
+            group: upright
+        - alert: UprightHTTPRegionalFailure
+          annotations:
+            summary: "HTTP: {{ `{{ $labels.name }}` }} failing from {{ `{{ $labels.site_city }}` }}"
+            description: "HTTP: {{ `{{ $labels.probe_target }}` }} failing from {{ `{{ $labels.site_city }}` }}"
+            upright: "https://{{ `{{ $labels.site_code }}` }}.{{ .Values.global.hostname }}/?probe_type={{ `{{ $labels.type }}` }}&status=fail&probe_name={{ `{{ $labels.name | urlquery }}` }}"
+          expr: |
+            upright_probe_up{type="http"} == 0
+            and on (name, type, probe_target)
+            count by (name, type, probe_target) (upright_probe_up == 0) == 1
+          for: 2m
+          labels:
+            severity: warning
+            group: upright
+    - name: upright_playwright_alerts
+      rules:
+        - alert: UprightPlaywrightProbeFailed
+          annotations:
+            summary: "Browser: {{ `{{ $labels.name }}` }} probe FAILED"
+            description: "{{ `{{ $value | humanizePercentage }}` }} of regions report failure for browser-based probe on {{ `{{ $labels.name }}` }}"
+            upright: "https://{{ include "upright.appHost" . }}/?probe_type={{ `{{ $labels.type }}` }}&status=fail&probe_name={{ `{{ $labels.name | urlquery }}` }}"
+          expr: upright:probe_down_fraction{type="playwright"} > 0.5
+          labels:
+            severity: "{{ `{{ $labels.alert_severity }}` }}"
+            group: upright
+        - alert: UprightPlaywrightProbeDegraded
+          annotations:
+            summary: "Browser: {{ `{{ $labels.name }}` }} degraded - {{ `{{ $value | humanizePercentage }}` }} of regions down"
+            description: "Not all regions report success for browser-based probe {{ `{{ $labels.name }}` }}"
+            upright: "https://{{ include "upright.appHost" . }}/?probe_type={{ `{{ $labels.type }}` }}&status=fail&probe_name={{ `{{ $labels.name | urlquery }}` }}"
+          expr: upright:probe_down_fraction{type="playwright"} > 0.25 and upright:probe_down_fraction{type="playwright"} <= 0.5
+          for: 20m
+          labels:
+            severity: warning
+            group: upright
+        - alert: UprightPlaywrightRegionalFailure
+          annotations:
+            summary: "Browser: {{ `{{ $labels.name }}` }} failing from {{ `{{ $labels.site_city }}` }}"
+            description: "Browser: {{ `{{ $labels.name }}` }} failing from {{ `{{ $labels.site_city }}` }}"
+            upright: "https://{{ `{{ $labels.site_code }}` }}.{{ .Values.global.hostname }}/?probe_type={{ `{{ $labels.type }}` }}&status=fail&probe_name={{ `{{ $labels.name | urlquery }}` }}"
+          expr: |
+            upright_probe_up{type="playwright"} == 0
+            and on (name, type, probe_target)
+            count by (name, type, probe_target) (upright_probe_up == 0) == 1
+          for: 20m
           labels:
             severity: warning
             group: upright

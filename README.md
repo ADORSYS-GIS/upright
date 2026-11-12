@@ -62,17 +62,17 @@ A push to `main` builds and publishes an image when `Dockerfile`, `.dockerignore
 ```bash
 helm dependency update ./charts/upright
 helm upgrade --install upright ./charts/upright \
-  --namespace datev-wallet \
+  --namespace monitoring \
   --values ./charts/upright/values-probes.yaml
 ```
 
-Helm loads the chart’s default `values.yaml` automatically and merges `values-probes.yaml`. Probe lists live in that file so they can grow without cluttering the rest of the deployment values. Changing a probe still updates the ConfigMap and rolls the Pod through the checksum already set in `values.yaml`.
+Helm loads the chart’s default `values.yaml` automatically and merges `values-probes.yaml`. Probe lists live in that file so they can grow without cluttering the rest of the deployment values. Changing a probe still updates the ConfigMap and rolls the Pod through the checksum already set in `values.yaml`. The chart is installed in the `monitoring` namespace for Prometheus/Alertmanager integration; the runtime app still reads the AWS-backed secret values configured for the service.
 
 To override the pin without editing values:
 
 ```bash
 helm upgrade --install upright ./charts/upright \
-  --namespace datev-wallet \
+  --namespace monitoring \
   --values ./charts/upright/values-probes.yaml \
   --set app-template.controllers.main.defaultContainerOptions.image.tag=sha-<commit> \
   --set app-template.controllers.main.defaultContainerOptions.image.digest=sha256:<hex>
@@ -95,19 +95,38 @@ Running `bin/rails db:prepare` from a local checkout uses the development databa
 
 ### Secrets
 
-Add these properties to the existing AWS secret `datev-wallet-secrets` in `eu-central-1`. The chart creates an Upright-owned namespaced `SecretStore` and copies each AWS property into a container environment variable. The running containers read those environment names. All three must be present or the app will not start.
+Add these properties to the existing AWS secret `datev-wallet-secrets` in `eu-central-1`. The chart creates an Upright-owned namespaced `SecretStore` and copies each AWS property into a container environment variable. The running containers read those environment names. The first three must be present or the app will not start. The Keycloak pair is required for the DATEV issuer Playwright probe.
 
 | AWS property | Container environment | Value |
 | --- | --- | --- |
 | `UPRIGHT_RAILS_MASTER_KEY` | `RAILS_MASTER_KEY` | The single line in `config/master.key`. This decrypts `config/credentials.yml.enc`. |
 | `UPRIGHT_ADMIN_PASSWORD` | `ADMIN_PASSWORD` | Password for the `admin` user. |
 | `UPRIGHT_PROMETHEUS_OTLP_TOKEN` | `PROMETHEUS_OTLP_TOKEN` | One shared machine token, generated once with `openssl rand -hex 64`. Every pod uses this same value. People sign in with the admin password. |
+| `UPRIGHT_KEYCLOAK_OID4VC_USERNAME` | `KEYCLOAK_OID4VC_USERNAME` | Keycloak username for realm `oid4vc-vci` on `keycloak-demo.solutions.adorsys.com`. Used only by the DATEV issuer browser probe. |
+| `UPRIGHT_KEYCLOAK_OID4VC_PASSWORD` | `KEYCLOAK_OID4VC_PASSWORD` | Matching Keycloak password. Never put this in probe YAML or the image. |
 
-Local development reads `ADMIN_PASSWORD` from `.env`, which defaults to `admin`. Deployment maps `UPRIGHT_ADMIN_PASSWORD` to `ADMIN_PASSWORD`. There is no production default. If `ADMIN_PASSWORD` is unset, sign-in has no credential, so the local password is never used in production.
+Local development reads `ADMIN_PASSWORD` from `.env`, which defaults to `admin`. Deployment maps `UPRIGHT_ADMIN_PASSWORD` to `ADMIN_PASSWORD`. There is no production default. If `ADMIN_PASSWORD` is unset, sign-in has no credential, so the local password is never used in production. For the browser probe locally, set `KEYCLOAK_OID4VC_USERNAME` and `KEYCLOAK_OID4VC_PASSWORD` in `.env`.
 
 The namespace also needs a pull secret named `ghcr-pull-secret` so the cluster can pull the image from GHCR.
 
-Probe YAML files are mounted from chart ConfigMaps at `/rails/probes/<file>`. The payloads are in `charts/upright/values-probes.yaml`. The base release ships with no live target. Add a target before expecting application alerts.
+### Probes
+
+HTTP targets live in `probes/http_probes.yml` locally and in `charts/upright/values-probes.yaml` for the cluster. Helm mounts those YAML files read-only at `/rails/probes/<file>` and rolls the Pod when the checksum changes. A Helm upgrade is enough to ship HTTP definition changes.
+
+Browser journeys are Ruby classes under `probes/` with optional authenticators under `probes/authenticators/`. They are scheduled in `config/recurring.yml`. New or changed Playwright code needs a new image digest and a chart upgrade that pins it.
+
+Configured from `fra`:
+
+| Check | Type | Success condition |
+| --- | --- | --- |
+| EUDI Wallet | HTTP | `https://wallet.eudi-adorsys.com` returns 2xx/3xx |
+| nginx proxy | HTTP | `https://proxy.eudi-adorsys.com` returns 2xx/3xx |
+| Verifier POS demo | HTTP | `https://registry.eudi-adorsys.com` returns 2xx/3xx |
+| OID4VC Keycloak | HTTP | `https://keycloak-demo.solutions.adorsys.com/realms/oid4vc-vci` returns 2xx/3xx |
+| DATEV issuer | HTTP | GitHub Pages app URL returns 2xx/3xx |
+| DATEV issuer login + QR | Playwright | Keycloak login reaches **You are logged in** and a credential-offer QR (`svg`) is shown |
+
+The missing-target alerts are intentionally gated so they do not fire before the first configured HTTP or Playwright target has reported metrics. Once the targets exist, `UprightHTTPProbesMissing` and the related failure rules ship in the chart `PrometheusRule`. Alerts go to the shared Alertmanager receiver (`platform-webhook` / Discord `#alerts`).
 
 ### SQLite backup and restore
 
