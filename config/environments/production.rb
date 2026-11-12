@@ -12,6 +12,11 @@ Rails.application.configure do
   # Full error reports are disabled.
   config.consider_all_requests_local = false
 
+  # Upright uses app/fra subdomains on upright.eudi-adorsys.com. Set this
+  # before Action Dispatch initializes its URL parser so host constraints use
+  # the same subdomain split as the production hostname.
+  config.action_dispatch.tld_length = 2
+
   # Turn on fragment caching in view templates.
   config.action_controller.perform_caching = true
 

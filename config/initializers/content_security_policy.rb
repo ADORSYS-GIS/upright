@@ -5,6 +5,9 @@
 #
 #   * JavaScript dependencies (Turbo, Stimulus, Leaflet, Frappe Charts) are
 #     pinned to https://cdn.jsdelivr.net in the engine's config/importmap.rb.
+#   * Prometheus serves a small inline bootstrap block with its proxied UI. Its
+#     exact current content is allowed by hash; arbitrary inline scripts remain
+#     blocked.
 #   * Stylesheets are same-origin, or the Leaflet CSS on https://unpkg.com.
 #     Turbo 8 copies the csp-nonce meta tag onto its progress-bar <style>.
 #     Frappe Charts 1.6.2 appends a <style> element and then fills it. The
@@ -28,7 +31,8 @@ Rails.application.configure do
     policy.img_src         :self, :data, "https://unpkg.com",
                            "https://*.tile.openstreetmap.org"
     policy.object_src      :none
-    policy.script_src      :self, "https://cdn.jsdelivr.net"
+    policy.script_src      :self, "https://cdn.jsdelivr.net",
+                           "'sha256-4GtrTVOihytHq/UJ8/k0st7YKP//jtbx3YAlEj3AcAY='"
     policy.style_src       :self, "https://unpkg.com",
                            "sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
                            "sha256-CssDN67+wdcVeOo1+UBDlTtUvWjUmBJyiyqqRJHhrTQ="

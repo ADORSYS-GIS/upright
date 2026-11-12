@@ -38,6 +38,15 @@ class ContentSecurityPolicyTest < ActionDispatch::IntegrationTest
     assert_equal [ "'unsafe-inline'" ], style_src_attr
   end
 
+  test "Prometheus bootstrap hash is allowed without allowing arbitrary inline scripts" do
+    get "/session/new"
+
+    script_src = directive_sources(response.headers["Content-Security-Policy"], "script-src")
+
+    assert_includes script_src, "'sha256-4GtrTVOihytHq/UJ8/k0st7YKP//jtbx3YAlEj3AcAY='"
+    assert_not_includes script_src, "'unsafe-inline'"
+  end
+
   private
     def directive_sources(policy, name)
       directive = policy.to_s.split(";").map(&:strip).find { |part| part.start_with?("#{name} ") }
