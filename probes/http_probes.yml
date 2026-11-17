@@ -30,3 +30,18 @@
   url: https://adorsys-gis.github.io/keycloak-oid4vc-mock-fe-datev/
   service: datev_issuer
   alert_severity: high
+
+- name: POS Keycloak
+  url: https://keycloak-pos.eudi-adorsys.com/realms/oid4vc-pos/.well-known/openid-configuration
+  service: oid4vc_keycloak_pos
+  alert_severity: high
+
+- name: Digital Payslip
+  url: https://digitaler-gehaltsnachweis.eudi-adorsys.com
+  service: digital_payslip
+  alert_severity: high
+
+- name: EUDI Wallet playground
+  url: https://playground.eudi-adorsys.com
+  service: eudi_wallet_playground
+  alert_severity: high

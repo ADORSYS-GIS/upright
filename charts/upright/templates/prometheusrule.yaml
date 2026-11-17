@@ -58,32 +58,30 @@ spec:
           labels:
             severity: critical
             group: upright
+        {{- range $target := (.Values.prometheusRule.configuredProbeTargets | default list) }}
+        {{- if eq $target.type "http" }}
         - alert: UprightHTTPProbesMissing
           annotations:
-            summary: "HTTP probes missing - no metrics received"
-            description: "No HTTP probe metrics are being reported. Upright may be down or probes are stuck."
-            upright: "https://{{ include "upright.appHost" . }}/?probe_type=http"
-          expr: |
-            count by () (max_over_time(upright_probe_up{type="http"}[1h])) > 0
-            and
-            count by () (max_over_time(upright_probe_up{type="http"}[5m])) == 0
-          for: 5m
+            summary: "HTTP probe missing - {{ $target.name }}"
+            description: "Configured HTTP probe {{ $target.name }} has not reported metrics for five minutes."
+            upright: "https://{{ include "upright.appHost" $ }}/?probe_type=http&probe_name={{ $target.name | urlquery }}"
+          expr: absent_over_time(upright_probe_up{type="http", name={{ $target.name | quote }}}[5m])
           labels:
             severity: critical
             group: upright
+        {{- else if eq $target.type "playwright" }}
         - alert: UprightPlaywrightProbesMissing
           annotations:
-            summary: "Playwright probes missing - no metrics received"
-            description: "No Playwright probe metrics are being reported. Browser probes may be stuck or Upright is down."
-            upright: "https://{{ include "upright.appHost" . }}/?probe_type=playwright"
-          expr: |
-            count by () (max_over_time(upright_probe_up{type="playwright"}[1h])) > 0
-            and
-            count by () (max_over_time(upright_probe_up{type="playwright"}[5m])) == 0
+            summary: "Playwright probe missing - {{ $target.name }}"
+            description: "Configured Playwright probe {{ $target.name }} has not reported metrics."
+            upright: "https://{{ include "upright.appHost" $ }}/?probe_type=playwright&probe_name={{ $target.name | urlquery }}"
+          expr: absent(upright_probe_up{type="playwright", name={{ $target.name | quote }}})
           for: 30m
           labels:
             severity: critical
             group: upright
+        {{- end }}
+        {{- end }}
         - alert: UprightHTTPSiteMissing
           annotations:
             summary: "HTTP probes missing from {{ `{{ $labels.site_city }}` }}"

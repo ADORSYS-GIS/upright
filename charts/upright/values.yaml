@@ -20,6 +20,9 @@ externalSecret:
 
 prometheusRule:
   enabled: true
+  # One entry per configured probe so missing alerts can identify targets that
+  # never report. Empty installs stay quiet.
+  configuredProbeTargets: []
 
 app-template:
   global:
@@ -222,3 +225,7 @@ app-template:
         - port: metrics
           interval: 15s
           path: /metrics
+          metricRelabelings:
+            - action: replace
+              targetLabel: environment
+              replacement: production

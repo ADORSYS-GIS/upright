@@ -6,6 +6,11 @@ class Playwright::Authenticator::DatevIssuer < Upright::Playwright::Authenticato
   def signin_path = KEYCLOAK_REALM_PATH
   def service_name = :datev_issuer
 
+  def session_valid_on?(page)
+    wait_for_network_idle(page)
+    page.get_by_role("heading", name: "You are logged in").count.positive?
+  end
+
   def authenticate
     page.goto(ISSUER_URL, timeout: 30.seconds.in_ms)
     page.get_by_role("button", name: "Login with Keycloak").click

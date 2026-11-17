@@ -95,7 +95,7 @@ Running `bin/rails db:prepare` from a local checkout uses the development databa
 
 ### Secrets
 
-Add these properties to the existing AWS secret `datev-wallet-secrets` in `eu-central-1`. The chart creates an Upright-owned namespaced `SecretStore` and copies each AWS property into a container environment variable. The running containers read those environment names. The first three must be present or the app will not start. The Keycloak pair is required for the DATEV issuer Playwright probe.
+Add these properties to the existing AWS secret `datev-wallet-secrets` in `eu-central-1`. The chart creates an Upright-owned namespaced `SecretStore` and copies each AWS property into a container environment variable. The running containers read those environment names. The first three must be present or the app will not start. The Keycloak pairs are required for the DATEV issuer, Verifier POS issuance, and Digital Payslip Playwright probes.
 
 | AWS property | Container environment | Value |
 | --- | --- | --- |
@@ -104,8 +104,12 @@ Add these properties to the existing AWS secret `datev-wallet-secrets` in `eu-ce
 | `UPRIGHT_PROMETHEUS_OTLP_TOKEN` | `PROMETHEUS_OTLP_TOKEN` | One shared machine token, generated once with `openssl rand -hex 64`. Every pod uses this same value. People sign in with the admin password. |
 | `UPRIGHT_KEYCLOAK_OID4VC_USERNAME` | `KEYCLOAK_OID4VC_USERNAME` | Keycloak username for realm `oid4vc-vci` on `keycloak-demo.solutions.adorsys.com`. Used only by the DATEV issuer browser probe. |
 | `UPRIGHT_KEYCLOAK_OID4VC_PASSWORD` | `KEYCLOAK_OID4VC_PASSWORD` | Matching Keycloak password. Never put this in probe YAML or the image. |
+| `UPRIGHT_KEYCLOAK_POS_USERNAME` | `KEYCLOAK_POS_USERNAME` | Keycloak monitor username for realm `oid4vc-pos` on `keycloak-pos.eudi-adorsys.com`. Used only by the Verifier POS issuance probe. |
+| `UPRIGHT_KEYCLOAK_POS_PASSWORD` | `KEYCLOAK_POS_PASSWORD` | Matching Keycloak password. Never put this in probe YAML or the image. |
+| `UPRIGHT_KEYCLOAK_OID4VC_PAYSLIP_USERNAME` | `KEYCLOAK_OID4VC_PAYSLIP_USERNAME` | Keycloak username for realm `oid4vc-payslip` on `keycloak-demo.solutions.adorsys.com`. Used only by the Digital Payslip browser probes. |
+| `UPRIGHT_KEYCLOAK_OID4VC_PAYSLIP_PASSWORD` | `KEYCLOAK_OID4VC_PAYSLIP_PASSWORD` | Matching Keycloak password. Never put this in probe YAML or the image. |
 
-Local development reads `ADMIN_PASSWORD` from `.env`, which defaults to `admin`. Deployment maps `UPRIGHT_ADMIN_PASSWORD` to `ADMIN_PASSWORD`. There is no production default. If `ADMIN_PASSWORD` is unset, sign-in has no credential, so the local password is never used in production. For the browser probe locally, set `KEYCLOAK_OID4VC_USERNAME` and `KEYCLOAK_OID4VC_PASSWORD` in `.env`.
+Local development reads `ADMIN_PASSWORD` from `.env`, which defaults to `admin`. Deployment maps `UPRIGHT_ADMIN_PASSWORD` to `ADMIN_PASSWORD`. There is no production default. If `ADMIN_PASSWORD` is unset, sign-in has no credential, so the local password is never used in production. For the DATEV browser probe locally, set `KEYCLOAK_OID4VC_USERNAME` and `KEYCLOAK_OID4VC_PASSWORD` in `.env`. For the Verifier POS issuance probe, set `KEYCLOAK_POS_USERNAME` and `KEYCLOAK_POS_PASSWORD`. For the Digital Payslip journeys, set `KEYCLOAK_OID4VC_PAYSLIP_USERNAME` and `KEYCLOAK_OID4VC_PAYSLIP_PASSWORD`.
 
 The namespace also needs a pull secret named `ghcr-pull-secret` so the cluster can pull the image from GHCR.
 
@@ -124,9 +128,18 @@ Configured from `fra`:
 | Verifier POS demo | HTTP | `https://registry.eudi-adorsys.com` returns 2xx/3xx |
 | OID4VC Keycloak | HTTP | `https://keycloak-demo.solutions.adorsys.com/realms/oid4vc-vci` returns 2xx/3xx |
 | DATEV issuer | HTTP | GitHub Pages app URL returns 2xx/3xx |
+| POS Keycloak | HTTP | `https://keycloak-pos.eudi-adorsys.com/realms/oid4vc-pos/.well-known/openid-configuration` returns 2xx/3xx |
+| Digital Payslip | HTTP | `https://digitaler-gehaltsnachweis.eudi-adorsys.com` returns 2xx/3xx |
+| EUDI Wallet playground | HTTP | `https://playground.eudi-adorsys.com` returns 2xx/3xx |
 | DATEV issuer login + QR | Playwright | Keycloak login reaches **You are logged in** and a credential-offer QR (`svg`) is shown |
+| POS New Order | Playwright | **New Order** shows the presentation QR (`Order request QR`) |
+| POS issuance | Playwright | **Open issuance flow** shows a credential-offer QR from realm `oid4vc-pos` |
+| Digital Payslip issuance | Playwright | Keycloak `oid4vc-payslip` login, **Mein Gehaltsnachweis** shows an issuance QR |
+| Digital Payslip presentation | Playwright | **Kreditantrag** shows a presentation QR |
 
-The missing-target alerts are intentionally gated so they do not fire before the first configured HTTP or Playwright target has reported metrics. Once the targets exist, `UprightHTTPProbesMissing` and the related failure rules ship in the chart `PrometheusRule`. Alerts go to the shared Alertmanager receiver (`platform-webhook` / Discord `#alerts`).
+DATEV issuer service status and uptime currently use HTTP results only. The Playwright login/QR journey is reported under the same service, but does not affect its uptime. Including browser results is a deliberate follow-up: add `playwright` to `datev_issuer`'s `uptime_probe_types` after confirming continuous Playwright metrics and deciding how HTTP and browser results should be aggregated.
+
+Missing-target alerts are rendered per configured probe name, so one probe can be reported missing even while others of the same type continue reporting. Keep `prometheusRule.configuredProbeTargets` in `charts/upright/values-probes.yaml` aligned with the HTTP probe names and scheduled Playwright probes. Empty installs render no target-missing alerts. Alerts go to the shared Alertmanager receiver (`platform-webhook` / Discord `#alerts`).
 
 ### SQLite backup and restore
 

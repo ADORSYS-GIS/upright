@@ -18,10 +18,24 @@
   name: OID4VC Keycloak
   public: true
 
+- code: oid4vc_keycloak_pos
+  name: POS Keycloak
+  public: true
+
+- code: digital_payslip
+  name: Digital Payslip
+  public: true
+
+- code: eudi_wallet_playground
+  name: EUDI Wallet playground
+  public: true
+
 - code: datev_issuer
   name: DATEV issuer
   public: true
-  # Browser journey also reports under this service; HTTP availability is the
-  # primary uptime signal until Playwright metrics are continuous.
+  # Service status and uptime intentionally use HTTP only. Adding `playwright`
+  # to this list is a deliberate follow-up if browser results should affect
+  # uptime; first ensure Playwright metrics are continuous and agree on the
+  # desired aggregation behavior.
   uptime_probe_types:
     - http

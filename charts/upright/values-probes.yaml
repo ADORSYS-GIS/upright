@@ -1,3 +1,34 @@
+prometheusRule:
+  # Keep this list aligned with HTTP probe names below and scheduled
+  # Playwright probe names in config/recurring.yml.
+  configuredProbeTargets:
+    - type: http
+      name: EUDI Wallet
+    - type: http
+      name: nginx proxy
+    - type: http
+      name: Verifier POS demo
+    - type: http
+      name: OID4VC Keycloak
+    - type: http
+      name: DATEV issuer
+    - type: http
+      name: POS Keycloak
+    - type: http
+      name: Digital Payslip
+    - type: http
+      name: EUDI Wallet playground
+    - type: playwright
+      name: datev_issuer
+    - type: playwright
+      name: verifier_pos_new_order
+    - type: playwright
+      name: verifier_pos_issuance
+    - type: playwright
+      name: digital_payslip_issuance
+    - type: playwright
+      name: digital_payslip_presentation
+
 app-template:
   configMaps:
     http-probes:
@@ -35,10 +66,20 @@ app-template:
             service: datev_issuer
             alert_severity: high
 
-          # Add once the public URL is known:
-          # - Keycloak issuer (POS demo), adorsys/keycloak-ssi-deployment
-          # - Digital payslip demo, ADORSYS-GIS/keycloak-oid4vc-digital-payslip-demo
-          # - EUDI-Wallet playground frontend, ADORSYS-GIS/fe-eudiw-playground
+          - name: POS Keycloak
+            url: https://keycloak-pos.eudi-adorsys.com/realms/oid4vc-pos/.well-known/openid-configuration
+            service: oid4vc_keycloak_pos
+            alert_severity: high
+
+          - name: Digital Payslip
+            url: https://digitaler-gehaltsnachweis.eudi-adorsys.com
+            service: digital_payslip
+            alert_severity: high
+
+          - name: EUDI Wallet playground
+            url: https://playground.eudi-adorsys.com
+            service: eudi_wallet_playground
+            alert_severity: high
 
     smtp-probes:
       data:
