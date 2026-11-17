@@ -86,7 +86,7 @@ class PrometheusRuleTest < ActionDispatch::IntegrationTest
     promtool = "promtool"
     skip "promtool is required to evaluate Prometheus alert rules" unless system(promtool, "--version", out: File::NULL, err: File::NULL)
 
-    rules = [http_missing_rules.first, playwright_missing_rules.first].map do |entry|
+    rules = [ http_missing_rules.first, playwright_missing_rules.first ].map do |entry|
       entry.slice("alert", "expr", "for", "labels")
     end
 
@@ -94,7 +94,7 @@ class PrometheusRuleTest < ActionDispatch::IntegrationTest
       rules_path = File.join(directory, "rules.yml")
       tests_path = File.join(directory, "tests.yml")
 
-      File.write(rules_path, YAML.dump("groups" => [{ "name" => "missing_probe_tests", "rules" => rules }]))
+      File.write(rules_path, YAML.dump("groups" => [ { "name" => "missing_probe_tests", "rules" => rules } ]))
       File.write(tests_path, YAML.dump(promtool_test_cases(rules_path, http_targets.first, playwright_targets.first)))
 
       output, status = Open3.capture2e(promtool, "test", "rules", tests_path)
@@ -122,13 +122,13 @@ class PrometheusRuleTest < ActionDispatch::IntegrationTest
 
         if type == "http"
           [
-            { "eval_time" => "0s", "alertname" => alertname, "exp_alerts" => [fired_alert] },
-            { "eval_time" => "4m30s", "alertname" => alertname, "exp_alerts" => [fired_alert] }
+            { "eval_time" => "0s", "alertname" => alertname, "exp_alerts" => [ fired_alert ] },
+            { "eval_time" => "4m30s", "alertname" => alertname, "exp_alerts" => [ fired_alert ] }
           ]
         else
           [
             { "eval_time" => "29m30s", "alertname" => alertname, "exp_alerts" => [] },
-            { "eval_time" => "30m", "alertname" => alertname, "exp_alerts" => [fired_alert] }
+            { "eval_time" => "30m", "alertname" => alertname, "exp_alerts" => [ fired_alert ] }
           ]
         end
       end
@@ -148,18 +148,18 @@ class PrometheusRuleTest < ActionDispatch::IntegrationTest
         if type == "http"
           [
             { "eval_time" => "4m30s", "alertname" => alertname, "exp_alerts" => [] },
-            { "eval_time" => "5m", "alertname" => alertname, "exp_alerts" => [fired_alert] }
+            { "eval_time" => "5m", "alertname" => alertname, "exp_alerts" => [ fired_alert ] }
           ]
         else
           [
             { "eval_time" => "30m", "alertname" => alertname, "exp_alerts" => [] },
-            { "eval_time" => "30m30s", "alertname" => alertname, "exp_alerts" => [fired_alert] }
+            { "eval_time" => "30m30s", "alertname" => alertname, "exp_alerts" => [ fired_alert ] }
           ]
         end
       end.flatten
 
       {
-        "rule_files" => [rules_path],
+        "rule_files" => [ rules_path ],
         "evaluation_interval" => "30s",
         "tests" => [
           {

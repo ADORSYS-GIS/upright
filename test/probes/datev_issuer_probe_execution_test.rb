@@ -161,5 +161,4 @@ class DatevIssuerProbeExecutionTest < ActiveJob::TestCase
         @page.instance_variable_set(:@authenticated, true) if @selector == "#kc-login"
       end
     end
-
 end
