@@ -73,8 +73,8 @@ class PrometheusRuleTest < ActionDispatch::IntegrationTest
     http_targets.each do |target|
       target_rule = http_missing_rules.find { |entry| entry["expr"].include?(%Q(name=#{target.fetch("name").to_json})) }
       assert target_rule, "HTTP missing rule was not rendered for #{target.fetch("name") }"
-      assert_includes target_rule["expr"], "absent_over_time(upright_probe_up{type=\"http\", name=#{target.fetch("name").to_json}}[5m])"
-      assert_nil target_rule["for"], "HTTP missing alert must not add another pending period"
+      assert_includes target_rule["expr"], "absent(upright_probe_up{type=\"http\", name=#{target.fetch("name").to_json}})"
+      assert_equal "5m", target_rule["for"]
     end
 
     playwright_targets.each do |target|
@@ -122,8 +122,8 @@ class PrometheusRuleTest < ActionDispatch::IntegrationTest
 
         if type == "http"
           [
-            { "eval_time" => "0s", "alertname" => alertname, "exp_alerts" => [ fired_alert ] },
-            { "eval_time" => "4m30s", "alertname" => alertname, "exp_alerts" => [ fired_alert ] }
+            { "eval_time" => "4m30s", "alertname" => alertname, "exp_alerts" => [] },
+            { "eval_time" => "5m", "alertname" => alertname, "exp_alerts" => [ fired_alert ] }
           ]
         else
           [
@@ -147,8 +147,8 @@ class PrometheusRuleTest < ActionDispatch::IntegrationTest
 
         if type == "http"
           [
-            { "eval_time" => "4m30s", "alertname" => alertname, "exp_alerts" => [] },
-            { "eval_time" => "5m", "alertname" => alertname, "exp_alerts" => [ fired_alert ] }
+            { "eval_time" => "5m", "alertname" => alertname, "exp_alerts" => [] },
+            { "eval_time" => "5m30s", "alertname" => alertname, "exp_alerts" => [ fired_alert ] }
           ]
         else
           [
@@ -172,7 +172,7 @@ class PrometheusRuleTest < ActionDispatch::IntegrationTest
             "name" => "reported probes that stop are detected",
             "interval" => "30s",
             "input_series" => alert_names.map do |type, (_alertname, target_name)|
-              values = type == "http" ? "1" : "1 stale"
+              values = "1 stale"
               other_target = type == "http" ? "nginx proxy" : "verifier_pos_new_order"
               [
                 { "series" => "upright_probe_up{type=\"#{type}\", name=#{target_name.to_json}}", "values" => values },

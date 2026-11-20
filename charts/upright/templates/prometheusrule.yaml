@@ -65,7 +65,8 @@ spec:
             summary: "HTTP probe missing - {{ $target.name }}"
             description: "Configured HTTP probe {{ $target.name }} has not reported metrics for five minutes."
             upright: "https://{{ include "upright.appHost" $ }}/?probe_type=http&probe_name={{ $target.name | urlquery }}"
-          expr: absent_over_time(upright_probe_up{type="http", name={{ $target.name | quote }}}[5m])
+          expr: absent(upright_probe_up{type="http", name={{ $target.name | quote }}})
+          for: 5m
           labels:
             severity: critical
             group: upright
