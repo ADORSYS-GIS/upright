@@ -1,6 +1,7 @@
 # Services for the status page and the incident form.
 # `code` must match the `service:` field on HTTP probes and the Playwright
-# authenticator service name where a browser journey owns the uptime signal.
+# `probe_service` (set on the probe, or inherited from its authenticator's
+# service name) where a browser journey owns the uptime signal.
 
 - code: eudi_wallet
   name: EUDI Wallet

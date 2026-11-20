@@ -95,21 +95,22 @@ Running `bin/rails db:prepare` from a local checkout uses the development databa
 
 ### Secrets
 
-Add these properties to the existing AWS secret `datev-wallet-secrets` in `eu-central-1`. The chart creates an Upright-owned namespaced `SecretStore` and copies each AWS property into a container environment variable. The running containers read those environment names. The first three must be present or the app will not start. The Keycloak pairs are required for the DATEV issuer, Verifier POS issuance, and Digital Payslip Playwright probes.
+Add these properties to the existing AWS secret `datev-wallet-secrets` in `eu-central-1`. The chart creates an Upright-owned namespaced `SecretStore` and two Kubernetes secrets: `upright-secret` (boot/sign-in values, injected into web, jobs, and `db-prepare`) and `upright-jobs-secret` (Keycloak monitor credentials, injected into the jobs container only). `RAILS_MASTER_KEY` and `PROMETHEUS_OTLP_TOKEN` must be present for boot. `ADMIN_PASSWORD` is not required to start the app; when it is absent, static sign-in is disabled. Set it to sign in as `admin`. The Keycloak pairs are required for the DATEV issuer, Verifier POS issuance, and Digital Payslip Playwright probes.
 
 | AWS property | Container environment | Value |
 | --- | --- | --- |
-| `UPRIGHT_RAILS_MASTER_KEY` | `RAILS_MASTER_KEY` | The single line in `config/master.key`. This decrypts `config/credentials.yml.enc`. |
-| `UPRIGHT_ADMIN_PASSWORD` | `ADMIN_PASSWORD` | Password for the `admin` user. |
-| `UPRIGHT_PROMETHEUS_OTLP_TOKEN` | `PROMETHEUS_OTLP_TOKEN` | One shared machine token, generated once with `openssl rand -hex 64`. Every pod uses this same value. People sign in with the admin password. |
+| `UPRIGHT_RAILS_MASTER_KEY` | `RAILS_MASTER_KEY` | The single line in `config/master.key`. This decrypts `config/credentials.yml.enc`. Required for boot. |
+| `UPRIGHT_ADMIN_PASSWORD` | `ADMIN_PASSWORD` | Password required to sign in as `admin`. Not required for boot; when absent, static sign-in is disabled. |
+| `UPRIGHT_PROMETHEUS_OTLP_TOKEN` | `PROMETHEUS_OTLP_TOKEN` | One shared machine token, generated once with `openssl rand -hex 64`. Every pod uses this same value. Required for boot. |
 | `UPRIGHT_KEYCLOAK_OID4VC_USERNAME` | `KEYCLOAK_OID4VC_USERNAME` | Keycloak username for realm `oid4vc-vci` on `keycloak-demo.solutions.adorsys.com`. Used only by the DATEV issuer browser probe. |
 | `UPRIGHT_KEYCLOAK_OID4VC_PASSWORD` | `KEYCLOAK_OID4VC_PASSWORD` | Matching Keycloak password. Never put this in probe YAML or the image. |
 | `UPRIGHT_KEYCLOAK_POS_USERNAME` | `KEYCLOAK_POS_USERNAME` | Keycloak monitor username for realm `oid4vc-pos` on `keycloak-pos.eudi-adorsys.com`. Used only by the Verifier POS issuance probe. |
 | `UPRIGHT_KEYCLOAK_POS_PASSWORD` | `KEYCLOAK_POS_PASSWORD` | Matching Keycloak password. Never put this in probe YAML or the image. |
+| `UPRIGHT_KEYCLOAK_POS_CLIENT_SECRET` | `KEYCLOAK_POS_CLIENT_SECRET` | Confidential-client secret for the server-side POS token fetch. Kept in the jobs secret only; never injected into `window.runtimeConfig`. |
 | `UPRIGHT_KEYCLOAK_OID4VC_PAYSLIP_USERNAME` | `KEYCLOAK_OID4VC_PAYSLIP_USERNAME` | Keycloak username for realm `oid4vc-payslip` on `keycloak-demo.solutions.adorsys.com`. Used only by the Digital Payslip browser probes. |
 | `UPRIGHT_KEYCLOAK_OID4VC_PAYSLIP_PASSWORD` | `KEYCLOAK_OID4VC_PAYSLIP_PASSWORD` | Matching Keycloak password. Never put this in probe YAML or the image. |
 
-Local development reads `ADMIN_PASSWORD` from `.env`, which defaults to `admin`. Deployment maps `UPRIGHT_ADMIN_PASSWORD` to `ADMIN_PASSWORD`. There is no production default. If `ADMIN_PASSWORD` is unset, sign-in has no credential, so the local password is never used in production. For the DATEV browser probe locally, set `KEYCLOAK_OID4VC_USERNAME` and `KEYCLOAK_OID4VC_PASSWORD` in `.env`. For the Verifier POS issuance probe, set `KEYCLOAK_POS_USERNAME` and `KEYCLOAK_POS_PASSWORD`. For the Digital Payslip journeys, set `KEYCLOAK_OID4VC_PAYSLIP_USERNAME` and `KEYCLOAK_OID4VC_PAYSLIP_PASSWORD`.
+Local development reads `ADMIN_PASSWORD` from `.env`, which defaults to `admin`. Deployment maps `UPRIGHT_ADMIN_PASSWORD` to `ADMIN_PASSWORD`. There is no production default. If `ADMIN_PASSWORD` is unset, you cannot sign in as `admin` (static sign-in is disabled), so the local password is never used in production. For the DATEV browser probe locally, set `KEYCLOAK_OID4VC_USERNAME` and `KEYCLOAK_OID4VC_PASSWORD` in `.env`. For the Verifier POS issuance probe, set `KEYCLOAK_POS_USERNAME`, `KEYCLOAK_POS_PASSWORD`, and `KEYCLOAK_POS_CLIENT_SECRET`. For the Digital Payslip journeys, set `KEYCLOAK_OID4VC_PAYSLIP_USERNAME` and `KEYCLOAK_OID4VC_PAYSLIP_PASSWORD`.
 
 The namespace also needs a pull secret named `ghcr-pull-secret` so the cluster can pull the image from GHCR.
 
@@ -127,7 +128,7 @@ Configured from `fra`:
 | nginx proxy | HTTP | `https://proxy.eudi-adorsys.com` returns 2xx/3xx |
 | Verifier POS demo | HTTP | `https://registry.eudi-adorsys.com` returns 2xx/3xx |
 | OID4VC Keycloak | HTTP | `https://keycloak-demo.solutions.adorsys.com/realms/oid4vc-vci` returns 2xx/3xx |
-| DATEV issuer | HTTP | GitHub Pages app URL returns 2xx/3xx |
+| DATEV issuer | HTTP | `https://adorsys-gis.github.io/keycloak-oid4vc-mock-fe-datev/` returns 2xx/3xx |
 | POS Keycloak | HTTP | `https://keycloak-pos.eudi-adorsys.com/realms/oid4vc-pos/.well-known/openid-configuration` returns 2xx/3xx |
 | Digital Payslip | HTTP | `https://digitaler-gehaltsnachweis.eudi-adorsys.com` returns 2xx/3xx |
 | EUDI Wallet playground | HTTP | `https://playground.eudi-adorsys.com` returns 2xx/3xx |
@@ -149,34 +150,34 @@ For an EBS snapshot, stop the single Upright Pod first so SQLite is quiescent, t
 
 ```bash
 set -euo pipefail
-trap 'kubectl scale -n datev-wallet deploy/upright --replicas=1' EXIT
-kubectl scale -n datev-wallet deploy/upright --replicas=0
-kubectl wait -n datev-wallet --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
-PV=$(kubectl get pvc upright -n datev-wallet -o jsonpath='{.spec.volumeName}')
+trap 'kubectl scale -n monitoring deploy/upright --replicas=1' EXIT
+kubectl scale -n monitoring deploy/upright --replicas=0
+kubectl wait -n monitoring --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
+PV=$(kubectl get pvc upright -n monitoring -o jsonpath='{.spec.volumeName}')
 VOLUME_ID=$(kubectl get pv "$PV" -o jsonpath='{.spec.csi.volumeHandle}')
 : "${PV:?resolved PVC has no bound volume}"
 : "${VOLUME_ID:?resolved PV has no CSI volume handle}"
 aws ec2 create-snapshot \
   --volume-id "$VOLUME_ID" \
-  --description "Upright datev-wallet SQLite backup" \
-  --tag-specifications 'ResourceType=snapshot,Tags=[{Key=Name,Value=upright-datev-wallet}]'
-kubectl scale -n datev-wallet deploy/upright --replicas=1
+  --description "Upright monitoring SQLite backup" \
+  --tag-specifications 'ResourceType=snapshot,Tags=[{Key=Name,Value=upright-monitoring}]'
+kubectl scale -n monitoring deploy/upright --replicas=1
 trap - EXIT
 ```
 
 Wait for the snapshot to reach `completed` in the EC2 console or with `aws ec2 describe-snapshots`. To restore from an EBS snapshot, create a replacement EBS volume from that snapshot in the EKS node's Availability Zone and restore it through a PV/PVC before starting Upright. The tar backup below is the documented in-place restore path.
 
-Backup, with the release name `upright` in `datev-wallet` (stop the app first so SQLite is quiescent):
+Backup, with the release name `upright` in `monitoring` (stop the app first so SQLite is quiescent):
 
 ```bash
 set -euo pipefail
-trap 'kubectl scale -n datev-wallet deploy/upright --replicas=1' EXIT
-kubectl scale -n datev-wallet deploy/upright --replicas=0
-kubectl wait -n datev-wallet --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
-kubectl run -n datev-wallet upright-backup --rm -i --restart=Never \
+trap 'kubectl scale -n monitoring deploy/upright --replicas=1' EXIT
+kubectl scale -n monitoring deploy/upright --replicas=0
+kubectl wait -n monitoring --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
+kubectl run -n monitoring upright-backup --rm -i --restart=Never \
   --image=busybox:1.36 --overrides='{"spec":{"containers":[{"name":"backup","image":"busybox:1.36","command":["sh","-c","tar -C /rails/storage -czf - ."],"volumeMounts":[{"name":"storage","mountPath":"/rails/storage"}]}],"volumes":[{"name":"storage","persistentVolumeClaim":{"claimName":"upright"}}]}}' \
   > upright-storage-$(date -u +%Y%m%dT%H%M%SZ).tgz
-kubectl scale -n datev-wallet deploy/upright --replicas=1
+kubectl scale -n monitoring deploy/upright --replicas=1
 trap - EXIT
 ```
 
@@ -191,14 +192,14 @@ listing=$(tar -tzf "$ARCHIVE")
 for f in production.sqlite3 production_persistent.sqlite3 production_cache.sqlite3 production_queue.sqlite3 production_cable.sqlite3; do
   printf '%s\n' "$listing" | grep -Eq "(^|/)${f}$" || { echo "archive missing $f" >&2; exit 1; }
 done
-kubectl scale -n datev-wallet deploy/upright --replicas=0
-kubectl wait -n datev-wallet --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
-kubectl run -n datev-wallet upright-restore --rm -i --restart=Never \
+kubectl scale -n monitoring deploy/upright --replicas=0
+kubectl wait -n monitoring --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
+kubectl run -n monitoring upright-restore --rm -i --restart=Never \
   --image=busybox:1.36 --overrides='{"spec":{"securityContext":{"runAsUser":1000,"runAsGroup":1000,"fsGroup":1000},"containers":[{"name":"restore","image":"busybox:1.36","command":["sh","-c","set -eu; stg=/rails/storage/.restore-staging; prev=/rails/storage/.restore-previous; if [ -d $prev ]; then echo interrupted restore: $prev exists >&2; exit 1; fi; rm -rf $stg; mkdir -p $stg; tar -C $stg -xzf -; for f in production.sqlite3 production_persistent.sqlite3 production_cache.sqlite3 production_queue.sqlite3 production_cable.sqlite3; do test -s $stg/$f || exit 1; done; mkdir $prev; for p in /rails/storage/*; do [ -e $p ] || continue; mv $p $prev/; done; for p in $stg/*; do [ -e $p ] || continue; mv $p /rails/storage/; done; rmdir $stg"],"volumeMounts":[{"name":"storage","mountPath":"/rails/storage"}]}],"volumes":[{"name":"storage","persistentVolumeClaim":{"claimName":"upright"}}]}}' \
   < "$ARCHIVE"
-kubectl scale -n datev-wallet deploy/upright --replicas=1
-kubectl rollout status -n datev-wallet deploy/upright --timeout=300s
-kubectl exec -n datev-wallet deploy/upright -c web -- rm -rf /rails/storage/.restore-previous
+kubectl scale -n monitoring deploy/upright --replicas=1
+kubectl rollout status -n monitoring deploy/upright --timeout=300s
+kubectl exec -n monitoring deploy/upright -c web -- rm -rf /rails/storage/.restore-previous
 ```
 
 If restore or rollout fails, Upright is left with `.restore-previous` on the PVC. Do not delete that directory. Scale to zero, move the files from `.restore-previous` back to `/rails/storage`, remove `.restore-previous` and `.restore-staging`, then start Upright to return to the pre-restore databases, or inspect the restored files and retry. If the helper Pod exits because `.restore-previous` already exists, treat it the same way: inspect before retrying. A leftover `.restore-previous` after a successful Ready state is safe to remove; the app does not use that directory.

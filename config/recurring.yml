@@ -7,24 +7,27 @@ development:
     schedule: every minute
     command: "Upright::Probes::SMTPProbe.check_and_record_all_later"
 
+  # Stagger Playwright jobs by one minute so Solid Queue's three worker threads
+  # do not launch several Chromium sessions at once. The jobs container limit is
+  # 2 GiB, which fits Rails plus about one headless browser (~300-600 MiB).
   datev_issuer_probe:
-    schedule: every 5 minutes
+    schedule: "*/5 * * * *"
     command: "Probes::Playwright::DatevIssuerProbe.check_and_record_later"
 
   verifier_pos_new_order_probe:
-    schedule: every 5 minutes
+    schedule: "1-59/5 * * * *"
     command: "Probes::Playwright::VerifierPosNewOrderProbe.check_and_record_later"
 
   verifier_pos_issuance_probe:
-    schedule: every 5 minutes
+    schedule: "2-59/5 * * * *"
     command: "Probes::Playwright::VerifierPosIssuanceProbe.check_and_record_later"
 
   digital_payslip_issuance_probe:
-    schedule: every 5 minutes
+    schedule: "3-59/5 * * * *"
     command: "Probes::Playwright::DigitalPayslipIssuanceProbe.check_and_record_later"
 
   digital_payslip_presentation_probe:
-    schedule: every 5 minutes
+    schedule: "4-59/5 * * * *"
     command: "Probes::Playwright::DigitalPayslipPresentationProbe.check_and_record_later"
 
   aggregate_rollups:
@@ -44,24 +47,26 @@ production:
     schedule: "*/30 * * * * *"
     command: "Upright::Probes::SMTPProbe.check_and_record_all_later"
 
+  # Same one-minute stagger as development: keep Playwright concurrency at ~1
+  # under the jobs container's 2 GiB memory limit.
   datev_issuer_probe:
-    schedule: every 5 minutes
+    schedule: "*/5 * * * *"
     command: "Probes::Playwright::DatevIssuerProbe.check_and_record_later"
 
   verifier_pos_new_order_probe:
-    schedule: every 5 minutes
+    schedule: "1-59/5 * * * *"
     command: "Probes::Playwright::VerifierPosNewOrderProbe.check_and_record_later"
 
   verifier_pos_issuance_probe:
-    schedule: every 5 minutes
+    schedule: "2-59/5 * * * *"
     command: "Probes::Playwright::VerifierPosIssuanceProbe.check_and_record_later"
 
   digital_payslip_issuance_probe:
-    schedule: every 5 minutes
+    schedule: "3-59/5 * * * *"
     command: "Probes::Playwright::DigitalPayslipIssuanceProbe.check_and_record_later"
 
   digital_payslip_presentation_probe:
-    schedule: every 5 minutes
+    schedule: "4-59/5 * * * *"
     command: "Probes::Playwright::DigitalPayslipPresentationProbe.check_and_record_later"
 
   clear_solid_queue_finished_jobs:

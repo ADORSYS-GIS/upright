@@ -1,10 +1,11 @@
-# HTTP Probe Definitions
+# HTTP Probe Definitions (local Compose / development)
 # Required: name, url
 # Optional: expected_status (default 200-399), alert_severity, service,
 #           basic_auth_credentials, proxy
 #
-# Production mounts the Helm copy from charts/upright/values-probes.yaml.
-# Keep these lists in sync.
+# Production reads the Helm ConfigMap from charts/upright/values-probes.yaml.
+# Change production targets there so a Helm upgrade can ship them without an
+# image rebuild (this file is in the Docker build context).
 
 - name: EUDI Wallet
   url: https://wallet.eudi-adorsys.com

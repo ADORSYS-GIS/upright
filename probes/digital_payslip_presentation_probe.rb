@@ -8,6 +8,7 @@ class Probes::Playwright::DigitalPayslipPresentationProbe < Upright::Probes::Pla
     page.get_by_role("button", name: "Kreditantrag").click
     page.get_by_role("heading", name: "QR-Code mit Ihrer EUDI-Wallet scannen").wait_for(timeout: 60.seconds.in_ms)
     page.locator("main.loan-content svg[width='200'][height='200']").wait_for(timeout: 60.seconds.in_ms)
+    true
   end
 
   def probe_target = APP_URL

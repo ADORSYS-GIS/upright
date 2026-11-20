@@ -8,6 +8,7 @@ class Probes::Playwright::DigitalPayslipIssuanceProbe < Upright::Probes::Playwri
     page.get_by_role("button", name: "Mein Gehaltsnachweis").click
     page.get_by_role("heading", name: "Digitaler Gehaltsnachweis").wait_for(timeout: 60.seconds.in_ms)
     page.locator(".qr-code-wrapper svg").wait_for(timeout: 60.seconds.in_ms)
+    true
   end
 
   def probe_target = APP_URL

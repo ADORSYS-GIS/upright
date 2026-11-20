@@ -6,6 +6,7 @@ class Probes::Playwright::VerifierPosNewOrderProbe < Upright::Probes::Playwright
     page.get_by_role("button", name: "New Order").click
     page.get_by_role("img", name: "Order request QR").wait_for(timeout: 60.seconds.in_ms)
     page.get_by_text(/openid4vp:\/\/authorize/).wait_for(timeout: 30.seconds.in_ms)
+    true
   end
 
   def probe_target = REGISTRY_URL

@@ -5,6 +5,7 @@ global:
   siteSubdomain: fra
   secretStore:
     targetSecretName: upright-secret
+    jobsSecretName: upright-jobs-secret
 
 aws:
   region: eu-central-1
@@ -102,6 +103,11 @@ app-template:
         jobs:
           command:
             - ./bin/jobs
+          envFrom:
+            - secretRef:
+                name: "{{ .Values.global.secretStore.targetSecretName }}"
+            - secretRef:
+                name: "{{ .Values.global.secretStore.jobsSecretName }}"
           resources:
             requests:
               cpu: 250m

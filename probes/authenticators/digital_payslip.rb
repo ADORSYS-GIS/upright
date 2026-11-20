@@ -6,6 +6,11 @@ class Playwright::Authenticator::DigitalPayslip < Upright::Playwright::Authentic
   def signin_path = KEYCLOAK_REALM_PATH
   def service_name = :digital_payslip
 
+  def session_valid_on?(page)
+    wait_for_network_idle(page)
+    page.get_by_role("button", name: "Mein Gehaltsnachweis").count.positive?
+  end
+
   def authenticate
     page.goto(APP_URL, timeout: 30.seconds.in_ms)
     page.locator("#username").fill(username)

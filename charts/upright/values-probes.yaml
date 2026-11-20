@@ -39,7 +39,7 @@ app-template:
           # Optional: expected_status (default 200-399), alert_severity, service,
           #           basic_auth_credentials, proxy
           #
-          # Keep in sync with probes/http_probes.yml for local development.
+          # Production HTTP targets. Local Compose uses probes/http_probes.yml.
 
           - name: EUDI Wallet
             url: https://wallet.eudi-adorsys.com
