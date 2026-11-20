@@ -38,5 +38,19 @@ module Upright
 
     # Don't generate system test files.
     config.generators.system_tests = nil
+
+    # Register before upright.yabeda calls Yabeda.configure!. DirectFileStore
+    # keeps upright_probe_up after a probe stops, so missing alerts age this
+    # heartbeat instead of relying on absent(upright_probe_up).
+    initializer "upright.probe_last_run_metric", before: "upright.yabeda" do
+      Yabeda.configure do
+        group :upright do
+          gauge :probe_last_run_timestamp_seconds,
+            comment: "Unix time when this probe last recorded a result",
+            aggregation: :max,
+            tags: %i[type name probe_target probe_service alert_severity]
+        end
+      end
+    end
   end
 end

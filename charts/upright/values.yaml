@@ -5,6 +5,7 @@ global:
   siteSubdomain: fra
   secretStore:
     targetSecretName: upright-secret
+    jobsSecretName: upright-jobs-secret
 
 aws:
   region: eu-central-1
@@ -20,6 +21,9 @@ externalSecret:
 
 prometheusRule:
   enabled: true
+  # One entry per configured probe so missing alerts can identify targets that
+  # never report. Empty installs stay quiet.
+  configuredProbeTargets: []
 
 app-template:
   global:
@@ -99,6 +103,11 @@ app-template:
         jobs:
           command:
             - ./bin/jobs
+          envFrom:
+            - secretRef:
+                name: "{{ .Values.global.secretStore.targetSecretName }}"
+            - secretRef:
+                name: "{{ .Values.global.secretStore.jobsSecretName }}"
           resources:
             requests:
               cpu: 250m
@@ -222,3 +231,7 @@ app-template:
         - port: metrics
           interval: 15s
           path: /metrics
+          metricRelabelings:
+            - action: replace
+              targetLabel: environment
+              replacement: production

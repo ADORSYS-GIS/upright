@@ -79,6 +79,21 @@ jobs:
       - name: Prepare the test databases
         run: bin/rails db:test:prepare
 
+      - name: Build Helm chart dependencies
+        run: |
+          helm repo add bjw-s-labs https://bjw-s-labs.github.io/helm-charts
+          helm dependency build ./charts/upright
+
+      - name: Install promtool
+        env:
+          PROMETHEUS_VERSION: "3.13.5"
+        run: |
+          curl -fsSL "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz" \
+            -o /tmp/prometheus.tar.gz
+          tar -xzf /tmp/prometheus.tar.gz -C /tmp
+          sudo install -m 0755 "/tmp/prometheus-${PROMETHEUS_VERSION}.linux-amd64/promtool" /usr/local/bin/promtool
+          promtool --version
+
       - name: Run the test suite
         run: bin/rails test
 

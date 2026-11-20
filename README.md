@@ -62,17 +62,17 @@ A push to `main` builds and publishes an image when `Dockerfile`, `.dockerignore
 ```bash
 helm dependency update ./charts/upright
 helm upgrade --install upright ./charts/upright \
-  --namespace datev-wallet \
+  --namespace monitoring \
   --values ./charts/upright/values-probes.yaml
 ```
 
-Helm loads the chart’s default `values.yaml` automatically and merges `values-probes.yaml`. Probe lists live in that file so they can grow without cluttering the rest of the deployment values. Changing a probe still updates the ConfigMap and rolls the Pod through the checksum already set in `values.yaml`.
+Helm loads the chart’s default `values.yaml` automatically and merges `values-probes.yaml`. Probe lists live in that file so they can grow without cluttering the rest of the deployment values. Changing a probe still updates the ConfigMap and rolls the Pod through the checksum already set in `values.yaml`. The chart is installed in the `monitoring` namespace for Prometheus/Alertmanager integration; the runtime app still reads the AWS-backed secret values configured for the service.
 
 To override the pin without editing values:
 
 ```bash
 helm upgrade --install upright ./charts/upright \
-  --namespace datev-wallet \
+  --namespace monitoring \
   --values ./charts/upright/values-probes.yaml \
   --set app-template.controllers.main.defaultContainerOptions.image.tag=sha-<commit> \
   --set app-template.controllers.main.defaultContainerOptions.image.digest=sha256:<hex>
@@ -95,19 +95,52 @@ Running `bin/rails db:prepare` from a local checkout uses the development databa
 
 ### Secrets
 
-Add these properties to the existing AWS secret `datev-wallet-secrets` in `eu-central-1`. The chart creates an Upright-owned namespaced `SecretStore` and copies each AWS property into a container environment variable. The running containers read those environment names. All three must be present or the app will not start.
+Add these properties to the existing AWS secret `datev-wallet-secrets` in `eu-central-1`. The chart creates an Upright-owned namespaced `SecretStore` and two Kubernetes secrets: `upright-secret` (boot/sign-in values, injected into web, jobs, and `db-prepare`) and `upright-jobs-secret` (Keycloak monitor credentials, injected into the jobs container only). `RAILS_MASTER_KEY` and `PROMETHEUS_OTLP_TOKEN` must be present for boot. `ADMIN_PASSWORD` is not required to start the app; when it is absent, static sign-in is disabled. Set it to sign in as `admin`. The Keycloak pairs are required for the DATEV issuer, Verifier POS issuance, and Digital Payslip Playwright probes.
 
 | AWS property | Container environment | Value |
 | --- | --- | --- |
-| `UPRIGHT_RAILS_MASTER_KEY` | `RAILS_MASTER_KEY` | The single line in `config/master.key`. This decrypts `config/credentials.yml.enc`. |
-| `UPRIGHT_ADMIN_PASSWORD` | `ADMIN_PASSWORD` | Password for the `admin` user. |
-| `UPRIGHT_PROMETHEUS_OTLP_TOKEN` | `PROMETHEUS_OTLP_TOKEN` | One shared machine token, generated once with `openssl rand -hex 64`. Every pod uses this same value. People sign in with the admin password. |
+| `UPRIGHT_RAILS_MASTER_KEY` | `RAILS_MASTER_KEY` | The single line in `config/master.key`. This decrypts `config/credentials.yml.enc`. Required for boot. |
+| `UPRIGHT_ADMIN_PASSWORD` | `ADMIN_PASSWORD` | Password required to sign in as `admin`. Not required for boot; when absent, static sign-in is disabled. |
+| `UPRIGHT_PROMETHEUS_OTLP_TOKEN` | `PROMETHEUS_OTLP_TOKEN` | One shared machine token, generated once with `openssl rand -hex 64`. Every pod uses this same value. Required for boot. |
+| `UPRIGHT_KEYCLOAK_OID4VC_USERNAME` | `KEYCLOAK_OID4VC_USERNAME` | Keycloak username for realm `oid4vc-vci` on `keycloak-demo.solutions.adorsys.com`. Used only by the DATEV issuer browser probe. |
+| `UPRIGHT_KEYCLOAK_OID4VC_PASSWORD` | `KEYCLOAK_OID4VC_PASSWORD` | Matching Keycloak password. Never put this in probe YAML or the image. |
+| `UPRIGHT_KEYCLOAK_POS_USERNAME` | `KEYCLOAK_POS_USERNAME` | Keycloak monitor username for realm `oid4vc-pos` on `keycloak-pos.eudi-adorsys.com`. Used only by the Verifier POS issuance probe. |
+| `UPRIGHT_KEYCLOAK_POS_PASSWORD` | `KEYCLOAK_POS_PASSWORD` | Matching Keycloak password. Never put this in probe YAML or the image. |
+| `UPRIGHT_KEYCLOAK_POS_CLIENT_SECRET` | `KEYCLOAK_POS_CLIENT_SECRET` | Confidential-client secret for the server-side POS token fetch. Kept in the jobs secret only; never injected into `window.runtimeConfig`. |
+| `UPRIGHT_KEYCLOAK_OID4VC_PAYSLIP_USERNAME` | `KEYCLOAK_OID4VC_PAYSLIP_USERNAME` | Keycloak username for realm `oid4vc-payslip` on `keycloak-demo.solutions.adorsys.com`. Used only by the Digital Payslip browser probes. |
+| `UPRIGHT_KEYCLOAK_OID4VC_PAYSLIP_PASSWORD` | `KEYCLOAK_OID4VC_PAYSLIP_PASSWORD` | Matching Keycloak password. Never put this in probe YAML or the image. |
 
-Local development reads `ADMIN_PASSWORD` from `.env`, which defaults to `admin`. Deployment maps `UPRIGHT_ADMIN_PASSWORD` to `ADMIN_PASSWORD`. There is no production default. If `ADMIN_PASSWORD` is unset, sign-in has no credential, so the local password is never used in production.
+Local development reads `ADMIN_PASSWORD` from `.env`, which defaults to `admin`. Deployment maps `UPRIGHT_ADMIN_PASSWORD` to `ADMIN_PASSWORD`. There is no production default. If `ADMIN_PASSWORD` is unset, you cannot sign in as `admin` (static sign-in is disabled), so the local password is never used in production. For the DATEV browser probe locally, set `KEYCLOAK_OID4VC_USERNAME` and `KEYCLOAK_OID4VC_PASSWORD` in `.env`. For the Verifier POS issuance probe, set `KEYCLOAK_POS_USERNAME`, `KEYCLOAK_POS_PASSWORD`, and `KEYCLOAK_POS_CLIENT_SECRET`. For the Digital Payslip journeys, set `KEYCLOAK_OID4VC_PAYSLIP_USERNAME` and `KEYCLOAK_OID4VC_PAYSLIP_PASSWORD`.
 
 The namespace also needs a pull secret named `ghcr-pull-secret` so the cluster can pull the image from GHCR.
 
-Probe YAML files are mounted from chart ConfigMaps at `/rails/probes/<file>`. The payloads are in `charts/upright/values-probes.yaml`. The base release ships with no live target. Add a target before expecting application alerts.
+### Probes
+
+HTTP targets live in `probes/http_probes.yml` locally and in `charts/upright/values-probes.yaml` for the cluster. Helm mounts those YAML files read-only at `/rails/probes/<file>` and rolls the Pod when the checksum changes. A Helm upgrade is enough to ship HTTP definition changes.
+
+Browser journeys are Ruby classes under `probes/` with optional authenticators under `probes/authenticators/`. They are scheduled in `config/recurring.yml`. New or changed Playwright code needs a new image digest and a chart upgrade that pins it.
+
+Configured from `fra`:
+
+| Check | Type | Success condition |
+| --- | --- | --- |
+| EUDI Wallet | HTTP | `https://wallet.eudi-adorsys.com` returns 2xx/3xx |
+| nginx proxy | HTTP | `https://proxy.eudi-adorsys.com` returns 2xx/3xx |
+| Verifier POS demo | HTTP | `https://registry.eudi-adorsys.com` returns 2xx/3xx |
+| OID4VC Keycloak | HTTP | `https://keycloak-demo.solutions.adorsys.com/realms/oid4vc-vci` returns 2xx/3xx |
+| DATEV issuer | HTTP | `https://adorsys-gis.github.io/keycloak-oid4vc-mock-fe-datev/` returns 2xx/3xx |
+| POS Keycloak | HTTP | `https://keycloak-pos.eudi-adorsys.com/realms/oid4vc-pos/.well-known/openid-configuration` returns 2xx/3xx |
+| Digital Payslip | HTTP | `https://digitaler-gehaltsnachweis.eudi-adorsys.com` returns 2xx/3xx |
+| EUDI Wallet playground | HTTP | `https://playground.eudi-adorsys.com` returns 2xx/3xx |
+| DATEV issuer login + QR | Playwright | Keycloak login reaches **You are logged in** and a credential-offer QR (`svg`) is shown |
+| POS New Order | Playwright | **New Order** shows the presentation QR (`Order request QR`) |
+| POS issuance | Playwright | **Open issuance flow** shows a credential-offer QR from realm `oid4vc-pos` |
+| Digital Payslip issuance | Playwright | Keycloak `oid4vc-payslip` login, **Mein Gehaltsnachweis** shows an issuance QR |
+| Digital Payslip presentation | Playwright | **Kreditantrag** shows a presentation QR |
+
+DATEV issuer service status and uptime currently use HTTP results only. The Playwright login/QR journey is reported under the same service, but does not affect its uptime. Including browser results is a deliberate follow-up: add `playwright` to `datev_issuer`'s `uptime_probe_types` after confirming continuous Playwright metrics and deciding how HTTP and browser results should be aggregated.
+
+Missing-target alerts are rendered per configured probe name, so one probe can be reported missing even while others of the same type continue reporting. Keep `prometheusRule.configuredProbeTargets` in `charts/upright/values-probes.yaml` aligned with the HTTP probe names and scheduled Playwright probes. Empty installs render no target-missing alerts. Alerts go to the shared Alertmanager receiver (`platform-webhook` / Discord `#alerts`).
 
 ### SQLite backup and restore
 
@@ -117,34 +150,34 @@ For an EBS snapshot, stop the single Upright Pod first so SQLite is quiescent, t
 
 ```bash
 set -euo pipefail
-trap 'kubectl scale -n datev-wallet deploy/upright --replicas=1' EXIT
-kubectl scale -n datev-wallet deploy/upright --replicas=0
-kubectl wait -n datev-wallet --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
-PV=$(kubectl get pvc upright -n datev-wallet -o jsonpath='{.spec.volumeName}')
+trap 'kubectl scale -n monitoring deploy/upright --replicas=1' EXIT
+kubectl scale -n monitoring deploy/upright --replicas=0
+kubectl wait -n monitoring --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
+PV=$(kubectl get pvc upright -n monitoring -o jsonpath='{.spec.volumeName}')
 VOLUME_ID=$(kubectl get pv "$PV" -o jsonpath='{.spec.csi.volumeHandle}')
 : "${PV:?resolved PVC has no bound volume}"
 : "${VOLUME_ID:?resolved PV has no CSI volume handle}"
 aws ec2 create-snapshot \
   --volume-id "$VOLUME_ID" \
-  --description "Upright datev-wallet SQLite backup" \
-  --tag-specifications 'ResourceType=snapshot,Tags=[{Key=Name,Value=upright-datev-wallet}]'
-kubectl scale -n datev-wallet deploy/upright --replicas=1
+  --description "Upright monitoring SQLite backup" \
+  --tag-specifications 'ResourceType=snapshot,Tags=[{Key=Name,Value=upright-monitoring}]'
+kubectl scale -n monitoring deploy/upright --replicas=1
 trap - EXIT
 ```
 
 Wait for the snapshot to reach `completed` in the EC2 console or with `aws ec2 describe-snapshots`. To restore from an EBS snapshot, create a replacement EBS volume from that snapshot in the EKS node's Availability Zone and restore it through a PV/PVC before starting Upright. The tar backup below is the documented in-place restore path.
 
-Backup, with the release name `upright` in `datev-wallet` (stop the app first so SQLite is quiescent):
+Backup, with the release name `upright` in `monitoring` (stop the app first so SQLite is quiescent):
 
 ```bash
 set -euo pipefail
-trap 'kubectl scale -n datev-wallet deploy/upright --replicas=1' EXIT
-kubectl scale -n datev-wallet deploy/upright --replicas=0
-kubectl wait -n datev-wallet --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
-kubectl run -n datev-wallet upright-backup --rm -i --restart=Never \
+trap 'kubectl scale -n monitoring deploy/upright --replicas=1' EXIT
+kubectl scale -n monitoring deploy/upright --replicas=0
+kubectl wait -n monitoring --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
+kubectl run -n monitoring upright-backup --rm -i --restart=Never \
   --image=busybox:1.36 --overrides='{"spec":{"containers":[{"name":"backup","image":"busybox:1.36","command":["sh","-c","tar -C /rails/storage -czf - ."],"volumeMounts":[{"name":"storage","mountPath":"/rails/storage"}]}],"volumes":[{"name":"storage","persistentVolumeClaim":{"claimName":"upright"}}]}}' \
   > upright-storage-$(date -u +%Y%m%dT%H%M%SZ).tgz
-kubectl scale -n datev-wallet deploy/upright --replicas=1
+kubectl scale -n monitoring deploy/upright --replicas=1
 trap - EXIT
 ```
 
@@ -159,14 +192,14 @@ listing=$(tar -tzf "$ARCHIVE")
 for f in production.sqlite3 production_persistent.sqlite3 production_cache.sqlite3 production_queue.sqlite3 production_cable.sqlite3; do
   printf '%s\n' "$listing" | grep -Eq "(^|/)${f}$" || { echo "archive missing $f" >&2; exit 1; }
 done
-kubectl scale -n datev-wallet deploy/upright --replicas=0
-kubectl wait -n datev-wallet --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
-kubectl run -n datev-wallet upright-restore --rm -i --restart=Never \
+kubectl scale -n monitoring deploy/upright --replicas=0
+kubectl wait -n monitoring --for=delete pod -l app.kubernetes.io/name=upright --timeout=120s
+kubectl run -n monitoring upright-restore --rm -i --restart=Never \
   --image=busybox:1.36 --overrides='{"spec":{"securityContext":{"runAsUser":1000,"runAsGroup":1000,"fsGroup":1000},"containers":[{"name":"restore","image":"busybox:1.36","command":["sh","-c","set -eu; stg=/rails/storage/.restore-staging; prev=/rails/storage/.restore-previous; if [ -d $prev ]; then echo interrupted restore: $prev exists >&2; exit 1; fi; rm -rf $stg; mkdir -p $stg; tar -C $stg -xzf -; for f in production.sqlite3 production_persistent.sqlite3 production_cache.sqlite3 production_queue.sqlite3 production_cable.sqlite3; do test -s $stg/$f || exit 1; done; mkdir $prev; for p in /rails/storage/*; do [ -e $p ] || continue; mv $p $prev/; done; for p in $stg/*; do [ -e $p ] || continue; mv $p /rails/storage/; done; rmdir $stg"],"volumeMounts":[{"name":"storage","mountPath":"/rails/storage"}]}],"volumes":[{"name":"storage","persistentVolumeClaim":{"claimName":"upright"}}]}}' \
   < "$ARCHIVE"
-kubectl scale -n datev-wallet deploy/upright --replicas=1
-kubectl rollout status -n datev-wallet deploy/upright --timeout=300s
-kubectl exec -n datev-wallet deploy/upright -c web -- rm -rf /rails/storage/.restore-previous
+kubectl scale -n monitoring deploy/upright --replicas=1
+kubectl rollout status -n monitoring deploy/upright --timeout=300s
+kubectl exec -n monitoring deploy/upright -c web -- rm -rf /rails/storage/.restore-previous
 ```
 
 If restore or rollout fails, Upright is left with `.restore-previous` on the PVC. Do not delete that directory. Scale to zero, move the files from `.restore-previous` back to `/rails/storage`, remove `.restore-previous` and `.restore-staging`, then start Upright to return to the pre-restore databases, or inspect the restored files and retry. If the helper Pod exits because `.restore-previous` already exists, treat it the same way: inspect before retrying. A leftover `.restore-previous` after a successful Ready state is safe to remove; the app does not use that directory.
