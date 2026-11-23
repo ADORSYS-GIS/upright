@@ -103,6 +103,11 @@ app-template:
         jobs:
           command:
             - ./bin/jobs
+          env:
+            PROMETHEUS_EXPORTER_PORT: "9395"
+          ports:
+            - name: metrics-jobs
+              containerPort: 9395
           envFrom:
             - secretRef:
                 name: "{{ .Values.global.secretStore.targetSecretName }}"
@@ -133,6 +138,11 @@ app-template:
           port: 9394
           protocol: HTTP
           targetPort: 9394
+        metrics-jobs:
+          enabled: true
+          port: 9395
+          protocol: HTTP
+          targetPort: 9395
 
   ingress:
     main:
@@ -229,6 +239,13 @@ app-template:
         identifier: main
       endpoints:
         - port: metrics
+          interval: 15s
+          path: /metrics
+          metricRelabelings:
+            - action: replace
+              targetLabel: environment
+              replacement: production
+        - port: metrics-jobs
           interval: 15s
           path: /metrics
           metricRelabelings:
