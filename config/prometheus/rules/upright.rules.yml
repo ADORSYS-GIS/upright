@@ -10,12 +10,12 @@ groups:
       - record: upright:probe_down_fraction
         expr: |
           (
-            count by (name, type, probe_target, alert_severity, probe_service) (upright_probe_up == 0)
+            count by (name, type, probe_target, alert_severity, probe_service, environment) (upright_probe_up == 0)
             or
-            count by (name, type, probe_target, alert_severity, probe_service) (upright_probe_up) * 0
+            count by (name, type, probe_target, alert_severity, probe_service, environment) (upright_probe_up) * 0
           )
           /
-          count by (name, type, probe_target, alert_severity, probe_service) (upright_probe_up)
+          count by (name, type, probe_target, alert_severity, probe_service, environment) (upright_probe_up)
 
       # Daily uptime percentage (0.0 to 1.0)
       # Uptime = percentage of time in past day when majority of sites reported UP
@@ -24,9 +24,9 @@ groups:
       - record: upright:probe_uptime_daily
         expr: |
           avg_over_time((
-            sum by (name, type, probe_target, alert_severity, probe_service) (upright_probe_up)
+            sum by (name, type, probe_target, alert_severity, probe_service, environment) (upright_probe_up)
             /
-            count by (name, type, probe_target, alert_severity, probe_service) (upright_probe_up)
+            count by (name, type, probe_target, alert_severity, probe_service, environment) (upright_probe_up)
             > bool 0.5
           )[1d:])
 
@@ -64,38 +64,69 @@ groups:
           severity: critical
           group: upright
 
-      # No HTTP metrics at all - probes completely stopped
+      # No HTTP metrics at all - first-run grace
       - alert: UprightHTTPProbesMissing
         annotations:
           summary: "HTTP probes missing - no metrics received"
           description: "No HTTP probe metrics are being reported. Upright may be down or probes are stuck."
           upright: "https://app.eudi-adorsys.com/?probe_type=http"
-        expr: absent(upright_probe_up{type="http"})
+        expr: absent(upright_probe_last_run_timestamp_seconds{type="http"})
         for: 5m
         labels:
           severity: critical
           group: upright
 
-      # No SMTP metrics at all - probes completely stopped
+      # HTTP heartbeats expired (DirectFileStore retains upright_probe_up)
+      - alert: UprightHTTPProbesMissing
+        annotations:
+          summary: "HTTP probes missing - no metrics received"
+          description: "No HTTP probe metrics are being reported. Upright may be down or probes are stuck."
+          upright: "https://app.eudi-adorsys.com/?probe_type=http"
+        expr: (time() - upright_probe_last_run_timestamp_seconds{type="http"} >= 300)
+        labels:
+          severity: critical
+          group: upright
+
+      # No SMTP metrics at all - first-run grace
       - alert: UprightSMTPProbesMissing
         annotations:
           summary: "SMTP probes missing - no metrics received"
           description: "No SMTP probe metrics are being reported. Upright may be down or probes are stuck."
           upright: "https://app.eudi-adorsys.com/?probe_type=smtp"
-        expr: absent(upright_probe_up{type="smtp"})
+        expr: absent(upright_probe_last_run_timestamp_seconds{type="smtp"})
         for: 5m
         labels:
           severity: critical
           group: upright
 
-      # No Playwright metrics at all - probes completely stopped
+      - alert: UprightSMTPProbesMissing
+        annotations:
+          summary: "SMTP probes missing - no metrics received"
+          description: "No SMTP probe metrics are being reported. Upright may be down or probes are stuck."
+          upright: "https://app.eudi-adorsys.com/?probe_type=smtp"
+        expr: (time() - upright_probe_last_run_timestamp_seconds{type="smtp"} >= 300)
+        labels:
+          severity: critical
+          group: upright
+
+      # No Playwright metrics at all - first-run grace
       - alert: UprightPlaywrightProbesMissing
         annotations:
           summary: "Playwright probes missing - no metrics received"
           description: "No Playwright probe metrics are being reported. Browser probes may be stuck or Upright is down."
           upright: "https://app.upright.example.com/?probe_type=playwright"
-        expr: absent(upright_probe_up{type="playwright"})
+        expr: absent(upright_probe_last_run_timestamp_seconds{type="playwright"})
         for: 30m
+        labels:
+          severity: critical
+          group: upright
+
+      - alert: UprightPlaywrightProbesMissing
+        annotations:
+          summary: "Playwright probes missing - no metrics received"
+          description: "No Playwright probe metrics are being reported. Browser probes may be stuck or Upright is down."
+          upright: "https://app.upright.example.com/?probe_type=playwright"
+        expr: (time() - upright_probe_last_run_timestamp_seconds{type="playwright"} >= 1800)
         labels:
           severity: critical
           group: upright
@@ -107,10 +138,9 @@ groups:
           description: "{{ $labels.site_city }} ({{ $labels.site_code }}) stopped reporting HTTP probe metrics."
           upright: "https://{{ $labels.site_code }}.eudi-adorsys.com/?probe_type=http"
         expr: |
-          count by (site_code, site_city) (max_over_time(upright_probe_up{type="http"}[1h]))
+          count by (site_code, site_city) (max_over_time(upright_probe_last_run_timestamp_seconds{type="http"}[1h]))
           unless
-          count by (site_code, site_city) (upright_probe_up{type="http"})
-        for: 5m
+          count by (site_code, site_city) ((time() - upright_probe_last_run_timestamp_seconds{type="http"}) < 300)
         labels:
           severity: warning
           group: upright
@@ -122,10 +152,9 @@ groups:
           description: "{{ $labels.site_city }} ({{ $labels.site_code }}) stopped reporting SMTP probe metrics."
           upright: "https://{{ $labels.site_code }}.eudi-adorsys.com/?probe_type=smtp"
         expr: |
-          count by (site_code, site_city) (max_over_time(upright_probe_up{type="smtp"}[1h]))
+          count by (site_code, site_city) (max_over_time(upright_probe_last_run_timestamp_seconds{type="smtp"}[1h]))
           unless
-          count by (site_code, site_city) (upright_probe_up{type="smtp"})
-        for: 5m
+          count by (site_code, site_city) ((time() - upright_probe_last_run_timestamp_seconds{type="smtp"}) < 300)
         labels:
           severity: warning
           group: upright
@@ -137,10 +166,9 @@ groups:
           description: "{{ $labels.site_city }} ({{ $labels.site_code }}) stopped reporting Playwright probe metrics. Probes may be stuck."
           upright: "https://{{ $labels.site_code }}.eudi-adorsys.com/?probe_type=playwright"
         expr: |
-          count by (site_code, site_city) (max_over_time(upright_probe_up{type="playwright"}[1h]))
+          count by (site_code, site_city) (max_over_time(upright_probe_last_run_timestamp_seconds{type="playwright"}[1h]))
           unless
-          count by (site_code, site_city) (upright_probe_up{type="playwright"})
-        for: 30m
+          count by (site_code, site_city) ((time() - upright_probe_last_run_timestamp_seconds{type="playwright"}) < 1800)
         labels:
           severity: warning
           group: upright

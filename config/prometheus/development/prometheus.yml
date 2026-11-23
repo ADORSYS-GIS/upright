@@ -15,3 +15,6 @@ scrape_configs:
     scrape_interval: 5s
     static_configs:
       - targets: ["app:9394"]
+    relabel_configs:
+      - target_label: environment
+        replacement: development

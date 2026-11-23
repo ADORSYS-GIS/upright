@@ -23,6 +23,10 @@ app.{{ .Values.global.hostname }}
 {{ .Values.global.secretStore.targetSecretName }}
 {{- end }}
 
+{{- define "upright.jobsSecret" -}}
+{{ .Values.global.secretStore.jobsSecretName | default (printf "%s-jobs-secret" (include "upright.name" .)) }}
+{{- end }}
+
 {{- define "upright.secretStoreName" -}}
 {{ .Values.secretStore.name }}
 {{- end }}

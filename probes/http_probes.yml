@@ -1,17 +1,48 @@
-# HTTP Probe Definitions
-# Add your HTTP health check probes here
+# HTTP Probe Definitions (local Compose / development)
+# Required: name, url
+# Optional: expected_status (default 200-399), alert_severity, service,
+#           basic_auth_credentials, proxy
 #
-# Required fields:
-#   - name: Unique identifier for the probe
-#   - url: The URL to check
-#
-# Optional fields:
-#   - expected_status: HTTP status code to expect (default: 200-399)
-#   - alert_severity: Alert severity when probe fails: medium, high (default), critical
-#   - basic_auth_credentials: Key in Rails credentials for basic auth
-#   - proxy: Key in Rails credentials for proxy settings
+# Production reads the Helm ConfigMap from charts/upright/values-probes.yaml.
+# Change production targets there so a Helm upgrade can ship them without an
+# image rebuild (this file is in the Docker build context).
 
-# Add a real target before enabling. An active probe is checked every 30 seconds
-# and a failure is sent to #alerts.
-# - name: Example Health Check
-#   url: https://example.com
+- name: EUDI Wallet
+  url: https://wallet.eudi-adorsys.com
+  service: eudi_wallet
+  alert_severity: high
+
+- name: nginx proxy
+  url: https://proxy.eudi-adorsys.com
+  service: nginx_proxy
+  alert_severity: high
+
+- name: Verifier POS demo
+  url: https://registry.eudi-adorsys.com
+  service: verifier_pos
+  alert_severity: high
+
+- name: OID4VC Keycloak
+  url: https://keycloak-demo.solutions.adorsys.com/realms/oid4vc-vci
+  service: oid4vc_keycloak
+  alert_severity: high
+
+- name: DATEV issuer
+  url: https://adorsys-gis.github.io/keycloak-oid4vc-mock-fe-datev/
+  service: datev_issuer
+  alert_severity: high
+
+- name: POS Keycloak
+  url: https://keycloak-pos.eudi-adorsys.com/realms/oid4vc-pos/.well-known/openid-configuration
+  service: oid4vc_keycloak_pos
+  alert_severity: high
+
+- name: Digital Payslip
+  url: https://digitaler-gehaltsnachweis.eudi-adorsys.com
+  service: digital_payslip
+  alert_severity: high
+
+- name: EUDI Wallet playground
+  url: https://playground.eudi-adorsys.com
+  service: eudi_wallet_playground
+  alert_severity: high

@@ -15,18 +15,18 @@ spec:
         - record: upright:probe_down_fraction
           expr: |
             (
-              count by (name, type, probe_target, alert_severity, probe_service) (upright_probe_up == 0)
+              count by (name, type, probe_target, alert_severity, probe_service, environment) (upright_probe_up == 0)
               or
-              count by (name, type, probe_target, alert_severity, probe_service) (upright_probe_up) * 0
+              count by (name, type, probe_target, alert_severity, probe_service, environment) (upright_probe_up) * 0
             )
             /
-            count by (name, type, probe_target, alert_severity, probe_service) (upright_probe_up)
+            count by (name, type, probe_target, alert_severity, probe_service, environment) (upright_probe_up)
         - record: upright:probe_uptime_daily
           expr: |
             avg_over_time((
-              sum by (name, type, probe_target, alert_severity, probe_service) (upright_probe_up)
+              sum by (name, type, probe_target, alert_severity, probe_service, environment) (upright_probe_up)
               /
-              count by (name, type, probe_target, alert_severity, probe_service) (upright_probe_up)
+              count by (name, type, probe_target, alert_severity, probe_service, environment) (upright_probe_up)
               > bool 0.5
             )[1d:])
     - name: upright_alerts
@@ -58,16 +58,142 @@ spec:
           labels:
             severity: critical
             group: upright
+        {{- range $target := (.Values.prometheusRule.configuredProbeTargets | default list) }}
+        {{- if eq $target.type "http" }}
+        # First-run grace: configured target with no sample yet.
+        - alert: UprightHTTPProbesMissing
+          annotations:
+            summary: "HTTP probe missing - {{ $target.name }}"
+            description: "Configured HTTP probe {{ $target.name }} has not reported metrics for five minutes."
+            upright: "https://{{ include "upright.appHost" $ }}/?probe_type=http&probe_name={{ $target.name | urlquery }}"
+          expr: absent(upright_probe_last_run_timestamp_seconds{type="http", name={{ $target.name | quote }}})
+          for: 5m
+          labels:
+            severity: critical
+            group: upright
+        # Stopped after reporting: age the heartbeat only (no extra `for`), so the
+        # total delay stays five minutes. DirectFileStore keeps upright_probe_up.
+        - alert: UprightHTTPProbesMissing
+          annotations:
+            summary: "HTTP probe missing - {{ $target.name }}"
+            description: "Configured HTTP probe {{ $target.name }} has not reported metrics for five minutes."
+            upright: "https://{{ include "upright.appHost" $ }}/?probe_type=http&probe_name={{ $target.name | urlquery }}"
+          expr: (time() - upright_probe_last_run_timestamp_seconds{type="http", name={{ $target.name | quote }}} >= 300)
+          labels:
+            severity: critical
+            group: upright
+        {{- else if eq $target.type "playwright" }}
+        - alert: UprightPlaywrightProbesMissing
+          annotations:
+            summary: "Playwright probe missing - {{ $target.name }}"
+            description: "Configured Playwright probe {{ $target.name }} has not reported metrics."
+            upright: "https://{{ include "upright.appHost" $ }}/?probe_type=playwright&probe_name={{ $target.name | urlquery }}"
+          expr: absent(upright_probe_last_run_timestamp_seconds{type="playwright", name={{ $target.name | quote }}})
+          for: 30m
+          labels:
+            severity: critical
+            group: upright
+        - alert: UprightPlaywrightProbesMissing
+          annotations:
+            summary: "Playwright probe missing - {{ $target.name }}"
+            description: "Configured Playwright probe {{ $target.name }} has not reported metrics."
+            upright: "https://{{ include "upright.appHost" $ }}/?probe_type=playwright&probe_name={{ $target.name | urlquery }}"
+          expr: (time() - upright_probe_last_run_timestamp_seconds{type="playwright", name={{ $target.name | quote }}} >= 1800)
+          labels:
+            severity: critical
+            group: upright
+        {{- end }}
+        {{- end }}
         - alert: UprightHTTPSiteMissing
           annotations:
             summary: "HTTP probes missing from {{ `{{ $labels.site_city }}` }}"
             description: "{{ `{{ $labels.site_city }}` }} ({{ `{{ $labels.site_code }}` }}) stopped reporting HTTP probe metrics."
             upright: "https://{{ `{{ $labels.site_code }}` }}.{{ .Values.global.hostname }}/?probe_type=http"
+          # Threshold is the full delay; do not add `for` or the alert stacks to ~10m.
           expr: |
-            count by (site_code, site_city) (max_over_time(upright_probe_up{type="http"}[1h]))
+            count by (site_code, site_city) (max_over_time(upright_probe_last_run_timestamp_seconds{type="http"}[1h]))
             unless
-            count by (site_code, site_city) (upright_probe_up{type="http"})
+            count by (site_code, site_city) ((time() - upright_probe_last_run_timestamp_seconds{type="http"}) < 300)
+          labels:
+            severity: warning
+            group: upright
+        - alert: UprightPlaywrightSiteMissing
+          annotations:
+            summary: "Playwright probes missing from {{ `{{ $labels.site_city }}` }}"
+            description: "{{ `{{ $labels.site_city }}` }} ({{ `{{ $labels.site_code }}` }}) stopped reporting Playwright probe metrics. Probes may be stuck."
+            upright: "https://{{ `{{ $labels.site_code }}` }}.{{ .Values.global.hostname }}/?probe_type=playwright"
+          expr: |
+            count by (site_code, site_city) (max_over_time(upright_probe_last_run_timestamp_seconds{type="playwright"}[1h]))
+            unless
+            count by (site_code, site_city) ((time() - upright_probe_last_run_timestamp_seconds{type="playwright"}) < 1800)
+          labels:
+            severity: warning
+            group: upright
+    - name: upright_http_alerts
+      rules:
+        - alert: UprightHTTPProbeDown
+          annotations:
+            summary: "HTTP: {{ `{{ $labels.name }}` }} is DOWN"
+            description: "{{ `{{ $value | humanizePercentage }}` }} of regions report failure on {{ `{{ $labels.probe_target }}` }}"
+            upright: "https://{{ include "upright.appHost" . }}/?probe_type={{ `{{ $labels.type }}` }}&status=fail&probe_name={{ `{{ $labels.name | urlquery }}` }}"
+          expr: upright:probe_down_fraction{type="http"} > 0.5
+          labels:
+            severity: "{{ `{{ $labels.alert_severity }}` }}"
+            group: upright
+        - alert: UprightHTTPProbeDegraded
+          annotations:
+            summary: "HTTP: {{ `{{ $labels.name }}` }} degraded - {{ `{{ $value | humanizePercentage }}` }} of regions down"
+            description: "{{ `{{ $value | humanizePercentage }}` }} of regions report failure on {{ `{{ $labels.probe_target }}` }}"
+            upright: "https://{{ include "upright.appHost" . }}/?probe_type={{ `{{ $labels.type }}` }}&status=fail&probe_name={{ `{{ $labels.name | urlquery }}` }}"
+          expr: upright:probe_down_fraction{type="http"} > 0.25 and upright:probe_down_fraction{type="http"} <= 0.5
           for: 5m
+          labels:
+            severity: warning
+            group: upright
+        - alert: UprightHTTPRegionalFailure
+          annotations:
+            summary: "HTTP: {{ `{{ $labels.name }}` }} failing from {{ `{{ $labels.site_city }}` }}"
+            description: "HTTP: {{ `{{ $labels.probe_target }}` }} failing from {{ `{{ $labels.site_city }}` }}"
+            upright: "https://{{ `{{ $labels.site_code }}` }}.{{ .Values.global.hostname }}/?probe_type={{ `{{ $labels.type }}` }}&status=fail&probe_name={{ `{{ $labels.name | urlquery }}` }}"
+          expr: |
+            upright_probe_up{type="http"} == 0
+            and on (name, type, probe_target)
+            count by (name, type, probe_target) (upright_probe_up == 0) == 1
+          for: 2m
+          labels:
+            severity: warning
+            group: upright
+    - name: upright_playwright_alerts
+      rules:
+        - alert: UprightPlaywrightProbeFailed
+          annotations:
+            summary: "Browser: {{ `{{ $labels.name }}` }} probe FAILED"
+            description: "{{ `{{ $value | humanizePercentage }}` }} of regions report failure for browser-based probe on {{ `{{ $labels.name }}` }}"
+            upright: "https://{{ include "upright.appHost" . }}/?probe_type={{ `{{ $labels.type }}` }}&status=fail&probe_name={{ `{{ $labels.name | urlquery }}` }}"
+          expr: upright:probe_down_fraction{type="playwright"} > 0.5
+          labels:
+            severity: "{{ `{{ $labels.alert_severity }}` }}"
+            group: upright
+        - alert: UprightPlaywrightProbeDegraded
+          annotations:
+            summary: "Browser: {{ `{{ $labels.name }}` }} degraded - {{ `{{ $value | humanizePercentage }}` }} of regions down"
+            description: "Not all regions report success for browser-based probe {{ `{{ $labels.name }}` }}"
+            upright: "https://{{ include "upright.appHost" . }}/?probe_type={{ `{{ $labels.type }}` }}&status=fail&probe_name={{ `{{ $labels.name | urlquery }}` }}"
+          expr: upright:probe_down_fraction{type="playwright"} > 0.25 and upright:probe_down_fraction{type="playwright"} <= 0.5
+          for: 20m
+          labels:
+            severity: warning
+            group: upright
+        - alert: UprightPlaywrightRegionalFailure
+          annotations:
+            summary: "Browser: {{ `{{ $labels.name }}` }} failing from {{ `{{ $labels.site_city }}` }}"
+            description: "Browser: {{ `{{ $labels.name }}` }} failing from {{ `{{ $labels.site_city }}` }}"
+            upright: "https://{{ `{{ $labels.site_code }}` }}.{{ .Values.global.hostname }}/?probe_type={{ `{{ $labels.type }}` }}&status=fail&probe_name={{ `{{ $labels.name | urlquery }}` }}"
+          expr: |
+            upright_probe_up{type="playwright"} == 0
+            and on (name, type, probe_target)
+            count by (name, type, probe_target) (upright_probe_up == 0) == 1
+          for: 20m
           labels:
             severity: warning
             group: upright
