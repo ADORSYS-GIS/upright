@@ -7,6 +7,8 @@ class Probes::Playwright::VerifierPosIssuanceProbe < Upright::Probes::Playwright
   KEYCLOAK_REALM = "oid4vc-pos".freeze
   KEYCLOAK_HOST = URI.parse(KEYCLOAK_URL).host.freeze
   CLIENT_ID = "openid4vc-rest-api".freeze
+  TOKEN_ENDPOINT_PATH = "/realms/#{KEYCLOAK_REALM}/protocol/openid-connect/token".freeze
+  TOKEN_ENDPOINT_URL = "#{KEYCLOAK_URL}#{TOKEN_ENDPOINT_PATH}".freeze
 
   ALLOWED_OFFER_PATHS = [
     "/realms/#{KEYCLOAK_REALM}/protocol/oid4vc/create-credential-offer",
@@ -16,12 +18,17 @@ class Probes::Playwright::VerifierPosIssuanceProbe < Upright::Probes::Playwright
   def check
     keycloak_requests = []
     token_response = fetch_issuance_token
-    page.route(%r{(/|%2F)protocol(/|%2F)openid-connect(/|%2F)token}) do |route|
-      route.fulfill(
-        status: 200,
-        content_type: "application/json",
-        body: token_response
-      )
+    # Intercept only POS Keycloak; fulfill solely the exact HTTPS oid4vc-pos token path.
+    page.route("#{KEYCLOAK_URL}/**") do |route|
+      if pos_token_endpoint?(route.request.url)
+        route.fulfill(
+          status: 200,
+          contentType: "application/json",
+          body: token_response
+        )
+      else
+        route.continue
+      end
     end
 
     page.on("request") { |request| keycloak_requests << request.url }
@@ -38,8 +45,7 @@ class Probes::Playwright::VerifierPosIssuanceProbe < Upright::Probes::Playwright
 
   private
     def fetch_issuance_token
-      uri = URI("#{KEYCLOAK_URL}/realms/#{KEYCLOAK_REALM}/protocol/openid-connect/token")
-      response = Net::HTTP.post_form(uri, {
+      response = Net::HTTP.post_form(URI(TOKEN_ENDPOINT_URL), {
         "client_id" => CLIENT_ID,
         "client_secret" => ENV.fetch("KEYCLOAK_POS_CLIENT_SECRET"),
         "username" => ENV.fetch("KEYCLOAK_POS_USERNAME"),
@@ -50,6 +56,14 @@ class Probes::Playwright::VerifierPosIssuanceProbe < Upright::Probes::Playwright
       raise "Failed to fetch POS issuance token: #{response.code}" unless response.is_a?(Net::HTTPSuccess)
 
       response.body
+    end
+
+    def pos_token_endpoint?(url)
+      uri = URI.parse(url)
+      uri.scheme == "https" && uri.port == URI::HTTPS.default_port &&
+        uri.host == KEYCLOAK_HOST && uri.path == TOKEN_ENDPOINT_PATH
+    rescue URI::InvalidURIError
+      false
     end
 
     def verify_credential_offer_realm!(request_urls)
