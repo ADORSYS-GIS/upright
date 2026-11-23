@@ -3,7 +3,7 @@
 # Production image for the Upright host app.
 # HTTP probes only by default. Browser probes need:
 #   docker build --build-arg INSTALL_PLAYWRIGHT=1 -t upright .
-ARG RUBY_VERSION=3.4.11
+ARG RUBY_VERSION=3.4.13
 FROM docker.io/library/ruby:${RUBY_VERSION}-slim AS base
 
 WORKDIR /rails
