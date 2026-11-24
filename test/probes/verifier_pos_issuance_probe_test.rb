@@ -19,7 +19,7 @@ class VerifierPosIssuanceProbeTest < ActiveSupport::TestCase
   end
 
   test "check raises when the page never requests a POS Keycloak credential offer" do
-    fake_page = FakePage.new(request_urls: ["https://example.com/unrelated"])
+    fake_page = FakePage.new(request_urls: [ "https://example.com/unrelated" ])
     probe = Probes::Playwright::VerifierPosIssuanceProbe.new
     probe.instance_variable_set(:@page, fake_page)
 
