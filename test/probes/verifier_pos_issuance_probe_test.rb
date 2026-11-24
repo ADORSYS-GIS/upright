@@ -3,23 +3,23 @@ require_relative "../../probes/verifier_pos_issuance_probe"
 
 class VerifierPosIssuanceProbeTest < ActiveSupport::TestCase
   test "check returns true when Open issuance flow shows a POS Keycloak credential-offer QR" do
-    fake_page = FakePage.new(
-      request_urls: [
-        "https://keycloak-pos.eudi-adorsys.com/realms/oid4vc-pos/protocol/oid4vc/credential-offer-uri?type=qr-code"
-      ]
-    )
+    offer_url = "https://keycloak-pos.eudi-adorsys.com/realms/oid4vc-pos/protocol/oid4vc/credential-offer-uri?type=qr-code"
+    fake_page = FakePage.new(click_request_urls: [ offer_url ])
     probe = Probes::Playwright::VerifierPosIssuanceProbe.new
     probe.instance_variable_set(:@page, fake_page)
 
     assert_equal true, probe.check
     assert_equal Probes::Playwright::VerifierPosIssuanceProbe::REGISTRY_URL, fake_page.visited_url
     assert fake_page.button_clicked
+    assert_includes fake_page.emitted_request_urls, offer_url
+    assert fake_page.request_emitted_after_click
     assert fake_page.heading_waited
     assert fake_page.qr_waited
+    assert fake_page.qr_waited_after_request
   end
 
   test "check raises when the page never requests a POS Keycloak credential offer" do
-    fake_page = FakePage.new(request_urls: [ "https://example.com/unrelated" ])
+    fake_page = FakePage.new(click_request_urls: [ "https://example.com/unrelated" ])
     probe = Probes::Playwright::VerifierPosIssuanceProbe.new
     probe.instance_variable_set(:@page, fake_page)
 
@@ -65,10 +65,12 @@ class VerifierPosIssuanceProbeTest < ActiveSupport::TestCase
     end
 
     class FakePage
-      attr_reader :visited_url, :button_clicked, :heading_waited, :qr_waited
+      attr_reader :visited_url, :button_clicked, :heading_waited, :qr_waited,
+        :emitted_request_urls, :request_emitted_after_click, :qr_waited_after_request
 
-      def initialize(request_urls:)
-        @request_urls = request_urls
+      def initialize(click_request_urls:)
+        @click_request_urls = click_request_urls
+        @emitted_request_urls = []
         @request_handler = nil
       end
 
@@ -80,20 +82,34 @@ class VerifierPosIssuanceProbeTest < ActiveSupport::TestCase
 
       def goto(url, timeout:)
         @visited_url = url
-        @request_urls.each { |request_url| @request_handler&.call(FakeRequest.new(request_url)) }
       end
 
       def get_by_role(role, name:)
         if role == "button" && name == "Open issuance flow"
-          FakeButton.new(-> { @button_clicked = true })
+          FakeButton.new(method(:emit_click_requests!))
         elsif role == "heading" && name == "Issuance Flow"
           FakeElement.new(-> { @heading_waited = true })
         elsif role == "img" && name == /credential offer QR/i
-          FakeElement.new(-> { @qr_waited = true })
+          FakeElement.new(method(:mark_qr_waited!))
         else
           raise "unexpected get_by_role: #{role}, #{name.inspect}"
         end
       end
+
+      private
+        def emit_click_requests!
+          @button_clicked = true
+          @click_request_urls.each do |request_url|
+            @emitted_request_urls << request_url
+            @request_handler&.call(FakeRequest.new(request_url))
+          end
+          @request_emitted_after_click = @button_clicked && @emitted_request_urls.any?
+        end
+
+        def mark_qr_waited!
+          @qr_waited = true
+          @qr_waited_after_request = @emitted_request_urls.any?
+        end
     end
 
     FakeRequest = Struct.new(:url)
