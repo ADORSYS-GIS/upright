@@ -86,10 +86,10 @@ class PrometheusRuleTest < ActionDispatch::IntegrationTest
     http_targets.each do |target|
       name = target.fetch("name").to_json
       absent_rule = http_missing_rules.find { |entry| entry["expr"].include?(%Q(absent(upright_probe_last_run_timestamp_seconds{type="http", name=#{name}}))) }
-      stale_rule = http_missing_rules.find { |entry| entry["expr"].include?(%Q(time() - upright_probe_last_run_timestamp_seconds{type="http", name=#{name}} >= 300)) }
+      stale_rule = http_missing_rules.find { |entry| entry["expr"].include?(%Q(time() - upright_probe_last_run_timestamp_seconds{type="http", name=#{name}} >= 1200)) }
       assert absent_rule, "HTTP first-run missing rule was not rendered for #{target.fetch("name")}"
       assert stale_rule, "HTTP stopped-heartbeat missing rule was not rendered for #{target.fetch("name")}"
-      assert_equal "5m", absent_rule["for"]
+      assert_equal "20m", absent_rule["for"]
       assert_nil stale_rule["for"]
     end
 
@@ -194,8 +194,8 @@ class PrometheusRuleTest < ActionDispatch::IntegrationTest
 
         if type == "http"
           [
-            { "eval_time" => "4m30s", "alertname" => alertname, "exp_alerts" => [] },
-            { "eval_time" => "5m", "alertname" => alertname, "exp_alerts" => [ fired_alert ] }
+            { "eval_time" => "19m30s", "alertname" => alertname, "exp_alerts" => [] },
+            { "eval_time" => "20m", "alertname" => alertname, "exp_alerts" => [ fired_alert ] }
           ]
         else
           [
@@ -207,7 +207,7 @@ class PrometheusRuleTest < ActionDispatch::IntegrationTest
       expected_alerts = expected_alerts.flatten
 
       # Heartbeat stuck at unix 0 while upright_probe_up remains present. The
-      # stopped rule has no `for`, so HTTP fires at 5m and Playwright at 30m.
+      # stopped rule has no `for`, so HTTP fires at 20m and Playwright at 30m.
       expected_stopped_alerts = alert_names.map do |type, (alertname, target_name)|
         fired_alert = {
           "exp_labels" => {
@@ -221,8 +221,8 @@ class PrometheusRuleTest < ActionDispatch::IntegrationTest
 
         if type == "http"
           [
-            { "eval_time" => "4m30s", "alertname" => alertname, "exp_alerts" => [] },
-            { "eval_time" => "5m", "alertname" => alertname, "exp_alerts" => [ fired_alert ] }
+            { "eval_time" => "19m30s", "alertname" => alertname, "exp_alerts" => [] },
+            { "eval_time" => "20m", "alertname" => alertname, "exp_alerts" => [ fired_alert ] }
           ]
         else
           [

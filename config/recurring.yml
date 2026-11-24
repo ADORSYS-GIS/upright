@@ -40,7 +40,7 @@ development:
 
 production:
   http_probes:
-    schedule: "*/30 * * * * *"
+    schedule: "*/10 * * * *"
     command: "Upright::Probes::HTTPProbe.check_and_record_all_later"
 
   smtp_probes:
