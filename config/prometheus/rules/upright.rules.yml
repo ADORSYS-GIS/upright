@@ -64,7 +64,7 @@ groups:
           severity: critical
           group: upright
 
-      # No HTTP metrics at all - first-run grace
+      # No HTTP metrics at all - first-run grace (~2× the 1m development schedule)
       - alert: UprightHTTPProbesMissing
         annotations:
           summary: "HTTP probes missing - no metrics received"
