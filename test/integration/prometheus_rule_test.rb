@@ -111,6 +111,10 @@ class PrometheusRuleTest < ActionDispatch::IntegrationTest
     missing_rules = http_missing_rules.select { |entry| entry["expr"].include?(%Q(name=#{first_http.to_json}})) }
       .concat(playwright_missing_rules.select { |entry| entry["expr"].include?(%Q(name=#{first_playwright.to_json}})) })
       .map { |entry| entry.slice("alert", "expr", "for", "labels") }
+    http_site_missing_rule = rules.find { |entry| entry["alert"] == "UprightHTTPSiteMissing" }
+    assert http_site_missing_rule, "UprightHTTPSiteMissing rule was not rendered"
+    assert_includes http_site_missing_rule["expr"], "< 1200"
+    site_missing_rules = [ http_site_missing_rule.slice("alert", "expr", "for", "labels") ]
     recording_rules = [ down_fraction, uptime_daily ].map do |entry|
       entry.slice("record", "expr")
     end
@@ -124,12 +128,14 @@ class PrometheusRuleTest < ActionDispatch::IntegrationTest
         YAML.dump(
           "groups" => [
             { "name" => "missing_probe_tests", "rules" => missing_rules },
+            { "name" => "site_missing_tests", "rules" => site_missing_rules },
             { "name" => "recording_tests", "interval" => "30s", "rules" => recording_rules }
           ]
         )
       )
       test_cases = promtool_test_cases(rules_path, http_targets.first, playwright_targets.first)
       test_cases["tests"] << production_recording_rule_test
+      test_cases["tests"] << http_site_missing_test
       File.write(tests_path, YAML.dump(test_cases))
 
       output, status = Open3.capture2e(promtool, "test", "rules", tests_path)
@@ -171,6 +177,36 @@ class PrometheusRuleTest < ActionDispatch::IntegrationTest
               }
             ]
           }
+        ]
+      }
+    end
+
+    # Heartbeat stuck at unix 0: site stays "seen in last hour" via max_over_time,
+    # but drops from the fresh set once age is no longer < 1200s (20m).
+    def http_site_missing_test
+      site_labels = 'type="http", site_code="fra", site_city="Frankfurt", name="EUDI Wallet"'
+      fired_alert = {
+        "exp_labels" => {
+          "alertname" => "UprightHTTPSiteMissing",
+          "site_code" => "fra",
+          "site_city" => "Frankfurt",
+          "severity" => "warning",
+          "group" => "upright"
+        }
+      }
+
+      {
+        "name" => "HTTP site missing fires at the 20m heartbeat threshold",
+        "interval" => "30s",
+        "input_series" => [
+          {
+            "series" => "upright_probe_last_run_timestamp_seconds{#{site_labels}}",
+            "values" => "0+0x120"
+          }
+        ],
+        "alert_rule_test" => [
+          { "eval_time" => "19m30s", "alertname" => "UprightHTTPSiteMissing", "exp_alerts" => [] },
+          { "eval_time" => "20m", "alertname" => "UprightHTTPSiteMissing", "exp_alerts" => [ fired_alert ] }
         ]
       }
     end

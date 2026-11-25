@@ -64,14 +64,14 @@ groups:
           severity: critical
           group: upright
 
-      # No HTTP metrics at all - first-run grace (~2× the 10m production schedule)
+      # No HTTP metrics at all - first-run grace (~2× the 1m development schedule)
       - alert: UprightHTTPProbesMissing
         annotations:
           summary: "HTTP probes missing - no metrics received"
           description: "No HTTP probe metrics are being reported. Upright may be down or probes are stuck."
           upright: "https://app.eudi-adorsys.com/?probe_type=http"
         expr: absent(upright_probe_last_run_timestamp_seconds{type="http"})
-        for: 20m
+        for: 5m
         labels:
           severity: critical
           group: upright
@@ -82,7 +82,7 @@ groups:
           summary: "HTTP probes missing - no metrics received"
           description: "No HTTP probe metrics are being reported. Upright may be down or probes are stuck."
           upright: "https://app.eudi-adorsys.com/?probe_type=http"
-        expr: (time() - upright_probe_last_run_timestamp_seconds{type="http"} >= 1200)
+        expr: (time() - upright_probe_last_run_timestamp_seconds{type="http"} >= 300)
         labels:
           severity: critical
           group: upright
@@ -140,7 +140,7 @@ groups:
         expr: |
           count by (site_code, site_city) (max_over_time(upright_probe_last_run_timestamp_seconds{type="http"}[1h]))
           unless
-          count by (site_code, site_city) ((time() - upright_probe_last_run_timestamp_seconds{type="http"}) < 1200)
+          count by (site_code, site_city) ((time() - upright_probe_last_run_timestamp_seconds{type="http"}) < 300)
         labels:
           severity: warning
           group: upright
