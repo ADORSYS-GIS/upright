@@ -48,8 +48,8 @@ app-template:
       defaultContainerOptions:
         image:
           repository: ghcr.io/adorsys-gis/upright/upright
-          tag: sha-cfbe27de8a87442fa4c52ed5b752f765529f8336
-          digest: sha256:65f17a091574dcd038d0af7f510df6962c77414104fed1f13fa17c1dc09bac4e
+          tag: sha-4d50f64c7ab93c4be0de51bee447a4074a4df3cd
+          digest: sha256:0de883d182bfa7e07c8493e7ca5f3eeda01fb8e4ab3b9a5ad126e13c9496ba36
           pullPolicy: IfNotPresent
         env:
           UPRIGHT_HOSTNAME: "{{ .Values.global.hostname }}"
