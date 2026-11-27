@@ -8,10 +8,11 @@ FROM docker.io/library/ruby:${RUBY_VERSION}-slim AS base
 
 WORKDIR /rails
 
-# Runtime packages for HTTP / traceroute probes. Node and Chromium stay out
-# of this layer so the HTTP-only image stays a few hundred MB.
+# Runtime packages for HTTP / traceroute probes, plus libvips for Active Storage
+# variants (ruby-vips). Node and Chromium stay out of this layer so the HTTP-only
+# image stays a few hundred MB.
 RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y curl libjemalloc2 sqlite3 iputils-ping mtr-tiny && \
+    apt-get install --no-install-recommends -y curl libjemalloc2 libvips42 sqlite3 iputils-ping mtr-tiny && \
     rm -rf /var/lib/apt/lists /var/cache/apt/archives
 
 ENV RAILS_ENV="production" \
